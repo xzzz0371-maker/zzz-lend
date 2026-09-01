@@ -16,9 +16,9 @@ contract ReserveManagerTest is BaseSetup {
         pool.accrue();
         uint256 reserve = pool.totalReserve();
         assertGt(reserve, 0);
-        // reserve = 5% of total interest（固定费率）
+        // reserve = 4% of total interest（固定费率）
         uint256 interest = pool.getTotalBorrows() - 3000e6;
-        assertApproxEqAbs(reserve, interest * 5e16 / 1e18, 1e6);
+        assertApproxEqAbs(reserve, interest * 4e16 / 1e18, 1e6);
     }
 
     function test_SkimMovesFundsToReserveManager() public {

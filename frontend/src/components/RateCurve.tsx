@@ -2,15 +2,15 @@
 
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine } from "recharts";
 
-// Interest-rate curve for the NORMAL preset (base 2%, slope1 8%, kink 80%, slope2 60%).
+// Interest-rate curve for the NORMAL preset (base 0.5%, slope1 4%, kink 80%, slope2 50%).
 // Estimated — matches the deployed InterestRateModel's NORMAL preset.
-const TIER_PREMIUM: Record<number, number> = { 1: 0, 2: 0.5, 3: 1.5, 4: 3, 5: 6 };
+const TIER_PREMIUM: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4.5 };
 
 function aprAt(util: number, tier: number): number {
-  const base = 2;
-  const slope1 = 8;
+  const base = 0.5;
+  const slope1 = 4;
   const kink = 80;
-  const slope2 = 60;
+  const slope2 = 50;
   let r = base;
   if (util <= kink) r += (slope1 * util) / 100;
   else r += (slope1 * kink) / 100 + (slope2 * (util - kink)) / 100;

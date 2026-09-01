@@ -60,7 +60,7 @@
 ```
 
 ### 风险储备（Risk Reserve）
-利息按**固定费率**分配：存款人 92% / 风险储备 5% / Treasury 3%（合计 100%）。储备目标 = `totalBorrows × 3%`：每次计息后，储备总资产（账面 `totalReserve` + 物理 `ReserveManager` 余额）超过目标的部分自动溢出转入 Treasury（事件 `ReserveOverflowTransferred`）。溢出从**账面 `totalReserve`** 划转；**物理储备（`ReserveManager` 余额）只被坏账消耗，不直接转入 Treasury**（安全设计：储备金只能回注池）。**当 `totalBorrows = 0` 时目标为 0，但**不触发溢出**，储备保留**，待借款恢复后按新目标继续计息。风险储备是**第一损失缓冲**：坏账发生时先由储备覆盖，储备不足部分即时降低 `supplyIndex`，由所有存款人按份额承担（类似基金净值下跌），不挂账、无需核销。Treasury 由 `collectTreasury()`（任何人可调）归集：将 `treasuryAccrued` 全部转给 `treasuryAddress` 并**清零**，`treasuryAddress` 为零地址时 revert。
+利息按**固定费率**分配：存款人 94% / 风险储备 4% / Treasury 2%（合计 100%）。储备目标 = `totalBorrows × 3%`：每次计息后，储备总资产（账面 `totalReserve` + 物理 `ReserveManager` 余额）超过目标的部分自动溢出转入 Treasury（事件 `ReserveOverflowTransferred`）。溢出从**账面 `totalReserve`** 划转；**物理储备（`ReserveManager` 余额）只被坏账消耗，不直接转入 Treasury**（安全设计：储备金只能回注池）。**当 `totalBorrows = 0` 时目标为 0，但**不触发溢出**，储备保留**，待借款恢复后按新目标继续计息。风险储备是**第一损失缓冲**：坏账发生时先由储备覆盖，储备不足部分即时降低 `supplyIndex`，由所有存款人按份额承担（类似基金净值下跌），不挂账、无需核销。Treasury 由 `collectTreasury()`（任何人可调）归集：将 `treasuryAccrued` 全部转给 `treasuryAddress` 并**清零**，`treasuryAddress` 为零地址时 revert。
 
 ### 风险来源（不止违约率）
 市场、清算（价格急跌来不及清算）、流动性（抵押物无买盘）、Oracle（异常/延迟）、智能合约、坏账、收益率（利用率下降）、极端行情（ETH -30%~-50%）。
@@ -222,7 +222,7 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 **三套利率预设**（NORMAL / HIGH_VOL / EXTREME，v1.0 · 2026-08-31）
 | 预设 | base | slope1 | kink | slope2 | 溢价(t1..t5) | 高LTV档 |
 |---|---|---|---|---|---|---|
-| NORMAL | 2% | 8% | 80% | 60% | 0/0.5/1.5/3/6% | 开放 |
+| NORMAL | 0.5% | 4% | 80% | 50% | 0/1/2/3/4.5% | 开放 |
 | HIGH_VOL | 2% | 20% | 65% | 150% | 0/1/3/5/8% | 开放 |
 | EXTREME | 5% | 40% | 50% | 300% | 0/2/5/8/12% | **tier4/5 暂停** |
 
@@ -242,11 +242,11 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 | LTV/LT 比值 | <0.6 | 0.6-0.8 | 0.8-1.0 | ≥1.0 |
 | 流动性 | ≥25% | ≥10% | ≥1% | <1% |
 
-**池参数**（v1.2 · 2026-08-31）：固定费率（存款人 92% / 储备 `reserveFactor=5%` / Treasury `treasuryFactor=3%`）、储备目标 `reserveTargetRatio=3%`（超出自动溢出转 Treasury）、清算 bonus=5%、close factor=50%、supplyIndex 起始 1e18、**最小金额限制（dust limit）**：`MIN_SUPPLY=10 USDC`、`MIN_BORROW=100 USDC`、`MIN_COLLATERAL=0.01 ETH`。
+**池参数**（v1.3 · 2026-09-01）：固定费率（存款人 94% / 储备 `reserveFactor=4%` / Treasury `treasuryFactor=2%`）、储备目标 `reserveTargetRatio=3%`（超出自动溢出转 Treasury）、清算 bonus=5%、close factor=50%、supplyIndex 起始 1e18、**最小金额限制（dust limit）**：`MIN_SUPPLY=10 USDC`、`MIN_BORROW=100 USDC`、`MIN_COLLATERAL=0.01 ETH`。
 
 ## 3.3 资金流与不变式 — v1.0 · 2026-08-31
 
-- 资金流：存款人 USDC → 池 → 借款人；借款人 ETH → 抵押（独立记账）；利息 → 存款人 92% + 风险储备 5% + Treasury 3%。
+- 资金流：存款人 USDC → 池 → 借款人；借款人 ETH → 抵押（独立记账）；利息 → 存款人 94% + 风险储备 4% + Treasury 2%。
 - **核心不变式**：`cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued + boostPool`（每笔操作后测试断言）。
 - 坏账（即时传导）：抵押归零仍有债 → `handleBadDebt`（任何人可调）先由风险储备（第一损失缓冲）覆盖可覆盖部分，未覆盖部分即时降低 `supplyIndex`，由所有存款人按份额承担损失；仓位一次性清零，**不挂账、无 `settleBadDebt`**。事件 `BadDebtRealized(user, badDebtAmount, coveredByReserve, lossToDepositors, oldSupplyIndex, newSupplyIndex)`。
 - 储备溢出：每次计息后，储备总资产（账面 + 物理）超过 `totalBorrows × 3%` 的部分溢出转 Treasury（事件 `ReserveOverflowTransferred`）；溢出只从**账面 `totalReserve`** 划转，物理储备仅由坏账消耗；`totalBorrows = 0` 时不触发溢出，储备保留。
@@ -315,7 +315,7 @@ forge fmt --check: 通过 ｜ npm run lint: 0 errors（393 warnings，风格性�
 | BadDebt.t.sol | 9 | 坏账即时传导：储备充足 supplyIndex 不变 / 储备不足与为零时降 supplyIndex / 多存款人等比例受损 / 坏账后取款与利息累计 / 管理员不可直改 supplyIndex / 零坏账无状态变化 / BadDebtRealized 事件 |
 | SecurityFixes.t.sol | 20 | 审计 v1.1 修复回归（F1 取整下溢 / F3 setPrice 校验 / F4 零地址 / F2 超额损失守恒 / F5 实时偏差 / F9 oracle 暂停清算）+ v1.2 最小金额限制（MIN_SUPPLY/MIN_BORROW/MIN_COLLATERAL） |
 | Boost.t.sol | 10 | Early Deposit Boost：利用率 0/10/50% 保底/抵扣/无保底、1 万上限、到期、Tier345 不参与、参数权限、多次领取、守恒 |
-| FeeMechanism.t.sol | 12 | 固定费率 92/5/3 合计100%；储备未达标无溢出/达标溢出转Treasury/恰达目标新增5%全溢出/坏账消耗储备后溢出停止/借款增减改变目标/totalBorrows=0 不溢出储备保留/collectTreasury 转账与零地址revert/溢出事件/参数边界 |
+| FeeMechanism.t.sol | 12 | 固定费率 94/4/2 合计100%；储备未达标无溢出/达标溢出转Treasury/恰达目标新增4%全溢出/坏账消耗储备后溢出停止/借款增减改变目标/totalBorrows=0 不溢出储备保留/collectTreasury 转账与零地址revert/溢出事件/参数边界 |
 | MinSeize.t.sol | 3 | minSeize 通过/不足 revert/0 不限制 |
 
 ## 4.2 压力测试汇总（`contracts/test-out/stress_matrix.md` 自动生成）— 2026-08-31
@@ -445,7 +445,7 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 | RiskEngine | `0xB203c077EB69B99954846Fb9521D1D56E6F5764C` | ✅ 已部署 |
 | LendingPool | `0x4c0F60fb5ee400f8430259a8C20cB35dE31d1a19` | ✅ 已验证（参数/角色/费率） |
 
-> **部署记录（2026-08-31）**：RPC 用 `https://ethereum-sepolia-rpc.publicnode.com`（ankr 需 API key、`rpc.sepolia.org` 404）。部署者 `0xC35C...6830`（4 ETH 起，部署后 ~3.988 ETH）。LendingPool 参数验证：`getUtilization()=0`、`getSupplyAPR()=0`、`getBorrowAPR(1)=~2%`、`reserveFactor=5%`、`treasuryFactor=3%`、`reserveTargetRatio=3%`、`supplyIndex=1e18`；角色 DEFAULT_ADMIN/PARAM_ADMIN/PAUSER=部署者；`ReserveManager.lendingPool` 已接线。⚠️ **USDC/USD feed（`0xA2F78...`）当前 stale**：last update ~11h 前，超过 1h `maxStaleness`，读 USDC 价会 revert（价格本身正确 0.9999）；待 feed 更新或由管理员调 `maxStaleness` 后再做借/还/清算相关操作。**E2E 已执行**（存/借/还/取/清算/守恒全通过，金额因测试网 ETH 余额缩放），详细报告见 `docs/E2E_Sepolia_测试报告.md`。
+> **部署记录（2026-08-31）**：RPC 用 `https://ethereum-sepolia-rpc.publicnode.com`（ankr 需 API key、`rpc.sepolia.org` 404）。部署者 `0xC35C...6830`（4 ETH 起，部署后 ~3.988 ETH）。LendingPool 参数验证：`getUtilization()=0`、`getSupplyAPR()=0`、`getBorrowAPR(1)=~2%`、`reserveFactor=5%`、`treasuryFactor=3%`、`reserveTargetRatio=3%`、`supplyIndex=1e18`；角色 DEFAULT_ADMIN/PARAM_ADMIN/PAUSER=部署者；`ReserveManager.lendingPool` 已接线。⚠️ **USDC/USD feed（`0xA2F78...`）当前 stale**：last update ~11h 前，超过 1h `maxStaleness`，读 USDC 价会 revert（价格本身正确 0.9999）；待 feed 更新或由管理员调 `maxStaleness` 后再做借/还/清算相关操作。**E2E 已执行**（存/借/还/取/清算/守恒全通过，金额因测试网 ETH 余额缩放），详细报告见 `docs/E2E_Sepolia_测试报告.md`。**（2026-09-01 参数已调整：NORMAL base 0.5%/slope1 4%/slope2 50%/溢价 0,1,2,3,4.5%，分成 94/4/2，见 §3.2。）**
 
 ## 6.8 cast 命令速查
 

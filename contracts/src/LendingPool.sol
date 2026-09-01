@@ -49,8 +49,8 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public lastAccrual;
     uint256 public treasuryAccrued;
     uint256 public reserveTargetRatio = 3e16;
-    uint256 public reserveFactor = 5e16;
-    uint256 public treasuryFactor = 3e16;
+    uint256 public reserveFactor = 4e16;
+    uint256 public treasuryFactor = 2e16;
     address public treasuryAddress;
 
     // ---- Early Deposit Boost（Tier 1/2 only，前 6 个月，保息不保本）----

@@ -73,17 +73,17 @@ contract InterestRateModel is Ownable, IInterestRateModel {
         emit PresetApplied(preset);
     }
 
-    /// @notice 正常市场：base 低、kink 80%、斜率平缓。
+    /// @notice 正常市场：base 低、kink 80%、斜率平缓。目标：正常利用率下比 Aave 更划算。
     function _applyNormal() internal {
-        baseRatePerSecond = _aprToPerSecond(0.02e18);
-        slope1PerSecond = _aprToPerSecond(0.08e18);
-        slope2PerSecond = _aprToPerSecond(0.6e18);
+        baseRatePerSecond = _aprToPerSecond(0.005e18);
+        slope1PerSecond = _aprToPerSecond(0.04e18);
+        slope2PerSecond = _aprToPerSecond(0.5e18);
         kinkUtilization = 8e17;
         tierPremiumPerSecond[1] = _aprToPerSecond(0);
-        tierPremiumPerSecond[2] = _aprToPerSecond(0.005e18);
-        tierPremiumPerSecond[3] = _aprToPerSecond(0.015e18);
+        tierPremiumPerSecond[2] = _aprToPerSecond(0.01e18);
+        tierPremiumPerSecond[3] = _aprToPerSecond(0.02e18);
         tierPremiumPerSecond[4] = _aprToPerSecond(0.03e18);
-        tierPremiumPerSecond[5] = _aprToPerSecond(0.06e18);
+        tierPremiumPerSecond[5] = _aprToPerSecond(0.045e18);
     }
 
     /// @notice 高波动市场：base 中等、kink 65%、斜率较陡。

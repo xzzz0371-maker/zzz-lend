@@ -26,15 +26,15 @@ contract InterestRateModelTest is Test {
     }
 
     function test_AnnualizedRateAtHalfUtilization() public view {
-        // base 2% + slope1 8% * 0.5 = 6% APR for tier 1
+        // base 0.5% + slope1 4% * 0.5 = 2.5% APR for tier 1
         uint256 apr = irm.getBorrowAPR(5e17, 1);
-        assertApproxEqAbs(apr, 6e16, 1e15);
+        assertApproxEqAbs(apr, 2.5e16, 1e15);
     }
 
     function test_NormalZeroUtilizationBorrowAPR() public view {
-        // NORMAL 预设 utilization=0 时 Borrow APR = baseRate = 2%
+        // NORMAL 预设 utilization=0 时 Borrow APR = baseRate = 0.5%
         uint256 apr = irm.getBorrowAPR(0, 1);
-        assertApproxEqAbs(apr, 2e16, 1e15);
+        assertApproxEqAbs(apr, 5e15, 1e15);
     }
 
     function test_AboveKinkRateJumps() public view {

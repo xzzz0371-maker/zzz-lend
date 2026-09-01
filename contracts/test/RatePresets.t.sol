@@ -12,8 +12,8 @@ contract RatePresetsTest is BaseSetup {
     function test_NormalPresetCurve() public {
         // 默认即 NORMAL
         assertEq(uint256(irm.activePreset()), uint256(InterestRateModel.MarketPreset.NORMAL));
-        // util=0 => baseRate 2%
-        assertApproxEqAbs(_aprAt(irm, 0, 1), 2e16, 1e14);
+        // util=0 => baseRate 0.5%
+        assertApproxEqAbs(_aprAt(irm, 0, 1), 5e15, 1e14);
         // kink=80%：单调递增
         uint256 prev = 0;
         for (uint256 u = 0; u <= 100; u += 10) {
@@ -21,10 +21,13 @@ contract RatePresetsTest is BaseSetup {
             assertGe(apr, prev);
             prev = apr;
         }
-        // util=80%（kink）=> base 2% + slope1 8% × 0.8 = 8.4%
-        assertApproxEqAbs(_aprAt(irm, 8e17, 1), 8.4e16, 1e14);
-        // util=100% => 2% + 8%*0.8 + 60%*0.2 = 20.4%
-        assertApproxEqAbs(_aprAt(irm, 1e18, 1), 20.4e16, 1e14);
+        // util=80%（kink）=> base 0.5% + slope1 4% × 0.8 = 3.7%
+        assertApproxEqAbs(_aprAt(irm, 8e17, 1), 3.7e16, 1e14);
+        // util=100% => 0.5% + 4%*0.8 + 50%*0.2 = 13.7%
+        assertApproxEqAbs(_aprAt(irm, 1e18, 1), 13.7e16, 1e14);
+        // 档位溢价：0/1/2/3/4.5%
+        assertApproxEqAbs(_aprAt(irm, 5e17, 2) - _aprAt(irm, 5e17, 1), 1e16, 1e14);
+        assertApproxEqAbs(_aprAt(irm, 5e17, 5) - _aprAt(irm, 5e17, 1), 4.5e16, 1e14);
     }
 
     function test_HighVolatilityPresetCurve() public {
@@ -98,6 +101,6 @@ contract RatePresetsTest is BaseSetup {
         assertApproxEqAbs(_aprAt(irm, 0, 1), 0.5e16, 1e14);
         // 再切回预设
         irm.applyPreset(InterestRateModel.MarketPreset.NORMAL);
-        assertApproxEqAbs(_aprAt(irm, 0, 1), 2e16, 1e14);
+        assertApproxEqAbs(_aprAt(irm, 0, 1), 5e15, 1e14);
     }
 }

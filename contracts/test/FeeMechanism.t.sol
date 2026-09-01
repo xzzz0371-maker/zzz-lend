@@ -31,9 +31,9 @@ contract FeeMechanismTest is BaseSetup {
 
     /// @notice 固定费率合计 100%（92 + 5 + 3）。
     function test_FixedFeesSumTo100() public view {
-        assertEq(pool.depositorShare(), 92e16);
-        assertEq(pool.reserveFactor(), 5e16);
-        assertEq(pool.treasuryFactor(), 3e16);
+        assertEq(pool.depositorShare(), 94e16);
+        assertEq(pool.reserveFactor(), 4e16);
+        assertEq(pool.treasuryFactor(), 2e16);
         assertEq(pool.depositorShare() + pool.reserveFactor() + pool.treasuryFactor(), 1e18);
         assertEq(pool.reserveTargetRatio(), 3e16);
     }
@@ -47,9 +47,9 @@ contract FeeMechanismTest is BaseSetup {
 
         uint256 interest = pool.getTotalBorrows() - 3000e6;
         assertGt(interest, 0);
-        assertApproxEqAbs(pool.totalReserve(), interest * 5e16 / 1e18, 1e6);
-        assertApproxEqAbs(pool.treasuryAccrued(), interest * 3e16 / 1e18, 1e6);
-        assertApproxEqAbs(pool.getTotalSupply() - 200_000e6, interest * 92e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.totalReserve(), interest * 4e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.treasuryAccrued(), interest * 2e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.getTotalSupply() - 200_000e6, interest * 94e16 / 1e18, 1e6);
         uint256 target = pool.getTotalBorrows() * pool.reserveTargetRatio() / 1e18;
         assertLt(pool.totalReserve(), target); // 无溢出
         _assertInvariant();
@@ -68,7 +68,7 @@ contract FeeMechanismTest is BaseSetup {
         uint256 target = pool.getTotalBorrows() * 1e15 / 1e18;
         assertApproxEqAbs(pool.totalReserve(), target, 1e6); // 溢出后固定在目标
         // treasury = 3% 计息 + 溢出（5% 计息超出目标的部分）
-        assertApproxEqAbs(pool.treasuryAccrued(), interest * 8e16 / 1e18 - target, 1e6);
+        assertApproxEqAbs(pool.treasuryAccrued(), interest * 6e16 / 1e18 - target, 1e6);
         _assertInvariant();
     }
 
@@ -91,8 +91,8 @@ contract FeeMechanismTest is BaseSetup {
         uint256 interest2 = pool.getTotalBorrows() - borrowsBefore;
         assertGt(interest2, 0);
         assertApproxEqAbs(pool.totalReserve(), pool.getTotalBorrows() * 1e15 / 1e18, 1e6); // 仍=目标
-        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest2 * 8e16 / 1e18, 1e6); // 3%+5% 全转
-        assertApproxEqAbs(pool.getTotalSupply() - supplyBefore, interest2 * 92e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest2 * 6e16 / 1e18, 1e6); // 2%+4% 全转
+        assertApproxEqAbs(pool.getTotalSupply() - supplyBefore, interest2 * 94e16 / 1e18, 1e6);
         _assertInvariant();
     }
 
@@ -137,7 +137,7 @@ contract FeeMechanismTest is BaseSetup {
         assertGt(interest2, 0);
         uint256 target2 = pool.getTotalBorrows() * 1e15 / 1e18;
         assertLt(pool.totalReserve() + reserveManager.balance(), target2); // 仍在积累，未溢出
-        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest2 * 3e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest2 * 2e16 / 1e18, 1e6);
         _assertInvariant();
     }
 
@@ -165,7 +165,7 @@ contract FeeMechanismTest is BaseSetup {
         uint256 targetNew = pool.getTotalBorrows() * 1e15 / 1e18;
         assertLt(pool.totalReserve(), targetNew);
         assertGt(pool.totalReserve(), reserveBefore); // 储备继续积累（未溢出）
-        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest * 3e16 / 1e18, 1e6);
+        assertApproxEqAbs(pool.treasuryAccrued() - treasuryBefore, interest * 2e16 / 1e18, 1e6);
         _assertInvariant();
     }
 

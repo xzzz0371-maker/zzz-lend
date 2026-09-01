@@ -86,12 +86,14 @@ contract BoostTest is BaseSetup {
         _assertInvariant();
     }
 
-    /// @dev 利用率 50%（Tier1 借款）：Tier1+2 利息已 ≥ 2% → 无保底可领。
-    function test_Boost_Util50PctNoBoost() public {
+    /// @dev 高利用率（~99%，Tier1 借款）：新利率下档息足够 → 无保底可领。
+    ///     注：新 NORMAL 曲线（base 0.5/slope1 4）下，Tier1 借款在 ≤80% 利用率时存款人分摊 < 2%，
+    ///     故用近 100% 利用率构造"Tier1+2 利息已 ≥ 2%"的边界。
+    function test_Boost_Util99PctTier1InterestSufficient() public {
         _supply(alice, 10_000e6);
         _supply(bob, 90_000e6);
-        _supplyCollateral(carol, 100 ether); // 300,000 USD
-        _borrow(carol, 50_000e6, 1); // util = 50%
+        _supplyCollateral(carol, 66 ether); // 198,000 USD
+        _borrow(carol, 99_000e6, 1); // util ≈ 99%（tier1 上限）
         _setBoostWindow();
         vm.warp(block.timestamp + 30 days);
         vm.roll(block.number + 1);
