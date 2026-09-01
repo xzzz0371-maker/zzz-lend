@@ -158,7 +158,7 @@ contract SwitchableOracleTest is Test {
         // 资金守恒
         assertApproxEqAbs(
             pool.cash() + pool.getTotalBorrows(),
-            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool(),
+            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued(),
             1e7
         );
     }

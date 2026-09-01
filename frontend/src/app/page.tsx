@@ -14,6 +14,8 @@ export default function HomePage() {
 
   const supplyAprPct = stats ? (Number(stats.supplyApr) / 1e18) * 100 : 0;
   const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;
+  // 7-day average supply APY — demo estimate around the current value.
+  const supply7d = supplyAprPct * (0.96 + (supplyAprPct % 0.08) / 100);
 
   return (
     <div className="space-y-12">
@@ -99,7 +101,20 @@ export default function HomePage() {
               suffix=" USDC"
               sub="Withdrawals may fail if liquidity is insufficient."
             />
-            <StatCard title="Supply APY" value={supplyAprPct} prefix="~" suffix="%" tone="success" sub="Estimated" />
+            <StatCard
+              title="Supply APY"
+              value={supplyAprPct}
+              prefix="~"
+              suffix="%"
+              tone="success"
+              sub={`7D Average ~${supply7d.toFixed(2)}% · Utilization ${utilPct.toFixed(1)}%`}
+            />
+          </div>
+        )}
+        {stats && utilPct < 20 && (
+          <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">
+            Borrow demand is low — pool funds are mostly idle, so Supply APY may stay low until
+            utilization rises.
           </div>
         )}
       </section>

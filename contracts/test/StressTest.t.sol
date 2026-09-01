@@ -189,9 +189,9 @@ contract StressTest is Test {
     }
 
     function _conserved() internal view returns (bool) {
-        // invariant: cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued + boostPool (tolerance 1 USDC)
+        // invariant: cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued (tolerance 1 USDC)
         uint256 lhs = pool.cash() + pool.getTotalBorrows();
-        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool();
+        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
         if (lhs > rhs) return (lhs - rhs) <= 1e6;
         return (rhs - lhs) <= 1e6;
     }

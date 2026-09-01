@@ -40,11 +40,6 @@ export function RiskCard({
           {risk}
         </span>
       </div>
-      {tier <= 2 && (
-        <span className="w-fit rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 ring-1 ring-emerald-200">
-          ✦ Deposit Boost eligible
-        </span>
-      )}
       <div className="text-3xl font-bold" style={{ color }}>
         <CountUp value={ltv} suffix="%" />
       </div>

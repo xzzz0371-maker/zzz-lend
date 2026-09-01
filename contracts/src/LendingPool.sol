@@ -53,19 +53,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public treasuryFactor = 2e16;
     address public treasuryAddress;
 
-    // ---- Early Deposit Boost（Tier 1/2 only，前 6 个月，保息不保本）----
-    uint256 public tier12Interest; // Tier1+2 累计利息（USDC 单位）
-    uint256 public tier345Interest; // Tier3/4/5 累计利息（USDC 单位）
-    uint256 public boostBaseIndex = WAD; // 仅跟踪 Tier1+2 利息中存款人所得部分的基准指数
-    uint256 public boostPool; // 保底基金余额（USDC 单位，由现金背书）
-    uint256 public boostStartTime;
-    uint256 public boostEndTime;
-    uint256 public boostRate = 2e16; // 保底利率 2%
-    uint256 public boostCapPerWallet = 10_000e6; // 每钱包保底上限 10,000 USDC
-    mapping(address => uint256) public userBoostClaimed;
-    mapping(address => uint256) public userBoostBaseIndexAtClaim;
-    mapping(address => uint256) public userBoostLastClaimAt;
-
     mapping(uint256 => uint256) public borrowIndexByTier;
     mapping(uint256 => uint256) public totalNormalizedByTier;
 
@@ -98,9 +85,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     event ReserveOverflowTransferred(uint256 amount);
     event TreasuryAddressUpdated(address value);
     event TreasuryCollected(uint256 amount, address to);
-    event BoostParamsUpdated(uint256 startTime, uint256 endTime, uint256 rate, uint256 capPerWallet);
-    event BoostFunded(uint256 amount);
-    event BoostClaimed(address indexed user, uint256 amount);
 
     constructor(
         IERC20 usdc_,
@@ -377,78 +361,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         require(usdc.transfer(treasuryAddress, amount), "transfer failed");
     }
 
-    // ==================== Early Deposit Boost ====================
-
-    /// @notice 管理员向保底基金注入 USDC（计入现金背书，参与资金守恒）。资金来源：Treasury 专项预算。
-    function fundBoost(uint256 amount) external nonReentrant onlyRole(PARAM_ADMIN_ROLE) {
-        require(amount > 0, "amount=0");
-        boostPool += amount;
-        cash += amount;
-        emit BoostFunded(amount);
-        require(usdc.transferFrom(msg.sender, address(this), amount), "transfer failed");
-    }
-
-    /// @notice 管理员配置保底参数：窗口、保底利率、每钱包上限。
-    function setBoostParams(uint256 startTime, uint256 endTime, uint256 rate, uint256 capPerWallet)
-        external
-        onlyRole(PARAM_ADMIN_ROLE)
-    {
-        require(rate <= WAD, "rate>100%");
-        require(capPerWallet > 0, "cap=0");
-        require(endTime >= startTime, "bad window");
-        boostStartTime = startTime;
-        boostEndTime = endTime;
-        boostRate = rate;
-        boostCapPerWallet = capPerWallet;
-        emit BoostParamsUpdated(startTime, endTime, rate, capPerWallet);
-    }
-
-    /// @notice 领取 Early Deposit Boost 补差（任何人可为用户领取；仅窗口内有效）。
-    ///         保底 = 合格存款 × boostRate × 时间 − Tier1+2 利息中该用户已得部分；
-    ///         只补利息不保本金；超额上限外的存款按比例归属。
-    function claimBoost(address user) external nonReentrant {
-        require(boostStartTime > 0 && block.timestamp >= boostStartTime, "boost not started");
-        require(block.timestamp <= boostEndTime, "boost ended");
-        UserPosition storage pos = positions[user];
-        require(pos.shares > 0, "no deposit");
-        uint256 userDeposit = pos.shares * supplyIndex / WAD;
-        uint256 eligible = userDeposit > boostCapPerWallet ? boostCapPerWallet : userDeposit;
-        uint256 last = userBoostLastClaimAt[user] >= boostStartTime ? userBoostLastClaimAt[user] : boostStartTime;
-        uint256 dt = block.timestamp - last;
-        uint256 guaranteed = eligible * boostRate * dt / (WAD * SECONDS_PER_YEAR);
-        uint256 base = userBoostBaseIndexAtClaim[user] == 0 ? WAD : userBoostBaseIndexAtClaim[user];
-        uint256 idxDelta = boostBaseIndex - base;
-        uint256 actual = pos.shares * idxDelta / WAD;
-        if (userDeposit > eligible && userDeposit > 0) {
-            actual = actual * eligible / userDeposit;
-        }
-        uint256 boostAmount = guaranteed > actual ? guaranteed - actual : 0;
-        require(boostAmount > 0, "nothing to claim");
-        require(boostPool >= boostAmount, "boost pool empty");
-        boostPool -= boostAmount;
-        cash -= boostAmount;
-        userBoostClaimed[user] += boostAmount;
-        userBoostBaseIndexAtClaim[user] = boostBaseIndex;
-        userBoostLastClaimAt[user] = block.timestamp;
-        emit BoostClaimed(user, boostAmount);
-        require(usdc.transfer(user, boostAmount), "transfer failed");
-    }
-
-    /// @notice 查询用户保底状态：(合格存款, 已领取, 剩余额度, 保底基金余额, 剩余天数)。
-    function getBoostStatus(address user)
-        external
-        view
-        returns (uint256 eligible, uint256 claimed, uint256 remaining, uint256 boostPoolBalance, uint256 timeLeft)
-    {
-        UserPosition storage pos = positions[user];
-        uint256 userDeposit = pos.shares * supplyIndex / WAD;
-        eligible = userDeposit > boostCapPerWallet ? boostCapPerWallet : userDeposit;
-        claimed = userBoostClaimed[user];
-        remaining = boostCapPerWallet > claimed ? boostCapPerWallet - claimed : 0;
-        boostPoolBalance = boostPool;
-        timeLeft = block.timestamp >= boostEndTime ? 0 : boostEndTime - block.timestamp;
-    }
-
     function setPriceOracle(IPriceOracle oracle) external onlyRole(PARAM_ADMIN_ROLE) {
         require(address(oracle) != address(0), "zero address");
         priceOracle = oracle;
@@ -587,7 +499,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         uint256 dt = currentTimestamp - lastAccrual;
         uint256 utilization = getUtilization();
         uint256 totalInterest = 0;
-        uint256 tier12Delta = 0;
         for (uint256 t = 1; t <= MAX_TIERS; t++) {
             uint256 totalNorm = totalNormalizedByTier[t];
             if (totalNorm == 0) continue;
@@ -596,15 +507,12 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             uint256 interest = totalNorm * index * rate * dt / (WAD * WAD);
             borrowIndexByTier[t] = index + index * rate * dt / WAD;
             totalInterest += interest;
-            if (t <= 2) tier12Delta += interest;
         }
         if (totalInterest == 0) {
             lastAccrual = currentTimestamp;
             return;
         }
-        tier12Interest += tier12Delta;
-        tier345Interest += totalInterest - tier12Delta;
-        // 固定比例分配：储备 5%、Treasury 3%、存款人 92%（余额为精确余数，保证资金守恒）
+        // 固定比例分配：储备 4%、Treasury 2%、存款人 94%（余额为精确余数，保证资金守恒）
         uint256 reserveShare = totalInterest * reserveFactor / WAD;
         uint256 treasuryShare = totalInterest * treasuryFactor / WAD;
         uint256 suppliersShare = totalInterest - reserveShare - treasuryShare;
@@ -612,10 +520,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             supplyIndex += suppliersShare * WAD / totalShares;
             totalReserve += reserveShare;
             treasuryAccrued += treasuryShare;
-            // Early Deposit Boost 基准：只累计 Tier1+2 利息中存款人所得部分
-            if (tier12Delta > 0) {
-                boostBaseIndex += tier12Delta * depositorShare() / totalShares;
-            }
         } else {
             totalReserve += totalInterest;
         }

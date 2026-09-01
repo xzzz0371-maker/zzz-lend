@@ -25,7 +25,7 @@ contract FeeMechanismTest is BaseSetup {
 
     function _assertInvariant() internal view {
         uint256 lhs = pool.cash() + pool.getTotalBorrows();
-        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool();
+        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
         assertTrue(lhs >= rhs ? (lhs - rhs) <= 1e6 : (rhs - lhs) <= 1e6, "invariant broken");
     }
 

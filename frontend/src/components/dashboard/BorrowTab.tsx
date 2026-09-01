@@ -5,8 +5,9 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_BORROW, TIERS } from "@/lib/config";
-import { useUserPosition, useMaxBorrowable, useBorrowAprs } from "@/lib/hooks";
+import { useUserPosition, useMaxBorrowable, useBorrowAprs, usePoolStats } from "@/lib/hooks";
 import { formatUsdc, formatApy, formatHealthFactor, hfTone } from "@/lib/format";
+import { borrowAprAt } from "@/lib/rates";
 import { YieldBreakdown } from "@/components/YieldBreakdown";
 import { TxStatus } from "./TxStatus";
 
@@ -18,6 +19,7 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
   const { position } = useUserPosition(address as Address);
   const maxBorrow = useMaxBorrowable(address as Address, tier);
   const borrowAprs = useBorrowAprs();
+  const { stats } = usePoolStats();
 
   const { data: hash, isPending, writeContract } = useWriteContract();
 
@@ -41,10 +43,16 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
     amountNum >= MIN_BORROW && raw > 0n && raw <= maxBorrow && !tierLocked && collateralValue > 0n;
 
   const borrowApr = borrowAprs[tier];
+  const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;
+  // Estimated rate band across ±10pt utilization, plus a demo 7D range.
+  const rangeLow = borrowAprAt(Math.max(0, utilPct - 10), tier);
+  const rangeHigh = borrowAprAt(Math.min(100, utilPct + 10), tier);
+  const range7dLow = Math.max(0, rangeLow - 0.3);
+  const range7dHigh = rangeHigh + 0.3;
   const grossYield = borrowApr !== undefined ? borrowApr * utilFactor() : undefined;
 
   function utilFactor() {
-    return 0.5; // demo utilization factor
+    return utilPct > 0 ? utilPct / 100 : 0.5; // demo utilization factor
   }
 
   return (
@@ -97,10 +105,27 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
         </p>
       </div>
 
+      <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700 ring-1 ring-sky-200">
+        Interest rates are variable and change with pool utilization. Your actual interest cost may
+        differ from the rate shown at borrow time.
+      </div>
+
       <div className="space-y-1 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-500">Borrow APR (tier {tier})</span>
-          <span className="text-slate-800">{formatApy(borrowApr)}</span>
+          <span className="text-slate-500">Borrow APR · Tier {tier}</span>
+          <span className="font-semibold text-slate-800">
+            {rangeLow.toFixed(2)}% – {rangeHigh.toFixed(2)}% / Current: {formatApy(borrowApr)}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">7D Range (estimated)</span>
+          <span className="text-slate-800">
+            {range7dLow.toFixed(2)}% – {range7dHigh.toFixed(2)}%
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-500">Utilization</span>
+          <span className="text-slate-800">{utilPct.toFixed(2)}%</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Max LTV</span>
