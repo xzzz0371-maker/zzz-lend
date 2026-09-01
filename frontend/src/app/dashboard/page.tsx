@@ -18,7 +18,7 @@ const TABS = ["Supply", "Withdraw", "Borrow", "Repay"] as const;
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="card p-6 text-sm text-slate-400">Loading…</div>}>
+    <Suspense fallback={<div className="card p-6 text-sm text-slate-500">Loading…</div>}>
       <DashboardInner />
     </Suspense>
   );
@@ -34,9 +34,9 @@ function DashboardInner() {
 
   if (!isConnected) {
     return (
-      <div className="card mx-auto max-w-md p-8 text-center">
-        <h1 className="text-xl font-semibold text-white">Connect your wallet</h1>
-        <p className="mt-2 text-sm text-slate-400">
+      <div className="card mx-auto max-w-md p-10 text-center">
+        <h1 className="font-display text-2xl font-bold text-slate-800">Connect your wallet</h1>
+        <p className="mt-2 text-sm text-slate-500">
           Connect to the Sepolia testnet to supply, borrow, withdraw and repay.
         </p>
       </div>
@@ -46,7 +46,7 @@ function DashboardInner() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+        <h1 className="font-display text-2xl font-bold text-slate-900">Dashboard</h1>
         <button
           className="btn-outline text-xs"
           disabled={faucetPending}
@@ -69,14 +69,17 @@ function DashboardInner() {
           <PositionPanel position={position} />
         </div>
         <div className="lg:col-span-3">
-          <div className="card p-5">
-            <div className="mb-4 flex gap-1 border-b border-border pb-3">
+          <div className="card p-6">
+            {/* segmented tabs */}
+            <div className="mb-5 flex rounded-xl bg-slate-200/50 p-1">
               {TABS.map((t, i) => (
                 <button
                   key={t}
                   onClick={() => setTab(i)}
-                  className={`rounded-lg px-4 py-2 text-sm ${
-                    tab === i ? "bg-accent text-white" : "text-slate-400 hover:text-white"
+                  className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+                    tab === i
+                      ? "bg-white text-accent shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {t}

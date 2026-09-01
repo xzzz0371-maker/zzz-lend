@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount } from "wagmi";
 import { TIERS } from "@/lib/config";
 import { useUserPosition, usePoolStats, usePrices } from "@/lib/hooks";
-import { formatEth } from "@/lib/format";
+import { CountUp } from "@/components/CountUp";
 
 const DROPS = [10, 20, 30, 40, 50];
 
@@ -15,10 +15,10 @@ function statusOf(hf: number): "safe" | "warning" | "liquidatable" {
   return "liquidatable";
 }
 
-const STATUS_STYLE: Record<string, string> = {
-  safe: "bg-success/15 text-success",
-  warning: "bg-warning/15 text-warning",
-  liquidatable: "bg-danger/15 text-danger",
+const HEAT: Record<string, { bg: string; text: string; label: string }> = {
+  safe: { bg: "rgba(16,185,129,0.16)", text: "#059669", label: "Safe" },
+  warning: { bg: "rgba(245,158,11,0.16)", text: "#b45309", label: "At Risk" },
+  liquidatable: { bg: "rgba(239,68,68,0.18)", text: "#dc2626", label: "Liquidatable" },
 };
 
 export default function StressTestPage() {
@@ -28,7 +28,6 @@ export default function StressTestPage() {
   const { ethUsd } = usePrices();
   const [drop, setDrop] = useState(30);
 
-  // Use the user's real position if present, otherwise a demo position.
   const collateralEth = position ? Number(position.collateral) / 1e18 : 10;
   const debtUsdc = position ? Number(position.debt) / 1e18 : 24000;
   const tier = position && position.tier > 0n ? Number(position.tier) : 5;
@@ -42,100 +41,117 @@ export default function StressTestPage() {
   const status = statusOf(hfAfter);
   const estLoss = status === "liquidatable" ? Math.max(0, debtUsdc - collateralUsdAfter) : 0;
 
-  const reserveCoverage = stats && Number(stats.totalBorrows) > 0 ? (Number(stats.totalReserve) / Number(stats.totalBorrows)) * 100 : 0;
-
-  // Pool-wide depositor loss estimate (demo): if aggregate collateral drops below borrows.
+  const reserveCoverage =
+    stats && Number(stats.totalBorrows) > 0 ? (Number(stats.totalReserve) / Number(stats.totalBorrows)) * 100 : 0;
   const poolBorrowUsd = stats ? Number(stats.totalBorrows) / 1e6 : 0;
-  // Estimate pool aggregate collateral via utilization proxy (demo): assume LTV≈50% of borrows.
-  const poolCollateralUsd = poolBorrowUsd * 2;
-  const poolCollateralAfter = poolCollateralUsd * (1 - drop / 100);
+  const poolCollateralAfter = poolBorrowUsd * 2 * (1 - drop / 100);
   const poolShortfall = Math.max(0, poolBorrowUsd - poolCollateralAfter * 0.78);
   const depositorLossPct = poolBorrowUsd > 0 ? Math.min(100, (poolShortfall / poolBorrowUsd) * 100) : 0;
 
-  const table = useMemo(() => {
-    const rows: { tier: number; ltv: number; lt: number }[] = TIERS;
-    return rows.map((r) => ({
-      ...r,
-      cells: DROPS.map((d) => {
-        const pa = ethUsd * (1 - d / 100);
-        const cv = collateralEth * pa;
-        // Use each tier's own borrow amount at max LTV for the table.
-        const debtForTier = collateralUsd * (r.ltv / 100);
-        const hf = cv * (r.lt / 100) / (debtForTier || 1);
-        return statusOf(hf);
-      }),
-    }));
-  }, [collateralEth, collateralUsd, ethUsd]);
+  const table = useMemo(
+    () =>
+      TIERS.map((r) => ({
+        ...r,
+        cells: DROPS.map((d) => {
+          const cv = collateralEth * ethUsd * (1 - d / 100);
+          const debtForTier = collateralUsd * (r.ltv / 100);
+          const hf = (cv * (r.lt / 100)) / (debtForTier || 1);
+          return statusOf(hf);
+        }),
+      })),
+    [collateralEth, collateralUsd, ethUsd],
+  );
+
+  const statusColor =
+    status === "safe" ? "#059669" : status === "warning" ? "#b45309" : "#dc2626";
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white">Stress Test</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Simulate an ETH price drop and see how your position and the pool react. This is an
-          off-chain simulation — nothing is broadcast.
+        <h1 className="font-display text-3xl font-bold text-slate-900">Stress Test</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Simulate an ETH price drop and see how your position and the pool react. Off-chain
+          simulation — nothing is broadcast.
         </p>
       </div>
 
       {/* Controls */}
-      <div className="card p-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
+      <div className="card card-hover p-6">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="w-full max-w-sm">
             <label className="label">ETH price drop</label>
-            <div className="flex gap-2">
-              {DROPS.map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setDrop(d)}
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    drop === d
-                      ? "border-accent bg-accent/10 text-white"
-                      : "border-border text-slate-400 hover:border-accent"
-                  }`}
-                >
-                  -{d}%
-                </button>
-              ))}
+            <input
+              type="range"
+              min={5}
+              max={60}
+              step={5}
+              value={drop}
+              onChange={(e) => setDrop(Number(e.target.value))}
+              className="w-full accent-blue-600"
+            />
+            <div className="mt-1 flex justify-between text-[11px] text-slate-500">
+              <span>-5%</span>
+              <span>-{drop}%</span>
+              <span>-60%</span>
             </div>
           </div>
-          <div className="text-sm text-slate-400">
-            Current ETH: <span className="text-slate-100">${ethUsd.toLocaleString("en-US")}</span> →{" "}
-            <span className="text-danger">${priceAfter.toLocaleString("en-US")}</span>
+          <div className="flex gap-2">
+            {DROPS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDrop(d)}
+                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                  drop === d
+                    ? "border-transparent bg-gradient-to-br from-accent to-blue-600 text-white shadow-lg shadow-accent/30"
+                    : "border-slate-200 bg-white/60 text-slate-600 hover:border-accent/50"
+                }`}
+              >
+                -{d}%
+              </button>
+            ))}
           </div>
         </div>
+        <div className="mt-4 text-sm text-slate-500">
+          Current ETH: <span className="font-semibold text-slate-800">${ethUsd.toLocaleString("en-US")}</span> →{" "}
+          <span className="font-semibold text-red-600">${priceAfter.toLocaleString("en-US")}</span>
+        </div>
         {!isConnected && (
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-slate-400">
             Not connected — showing a demo position (10 ETH collateral, ~80% LTV at tier 5).
           </p>
         )}
       </div>
 
-      {/* Simulation output */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Collateral value" value={`$${collateralUsdAfter.toLocaleString("en-US", { maximumFractionDigits: 0 })}`} sub={`from $${collateralUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`} />
-        <Metric label="LTV after" value={`${ltvAfter.toFixed(2)}%`} tone={ltvAfter > cfg.ltv ? "danger" : undefined} />
-        <Metric label="Health Factor" value={hfAfter.toFixed(2)} tone={status === "safe" ? "success" : status === "warning" ? "warning" : "danger"} />
-        <Metric label="Liquidation status" value={status === "safe" ? "Safe" : status === "warning" ? "At Risk" : "Liquidatable"} tone={status === "safe" ? "success" : status === "warning" ? "warning" : "danger"} />
+      {/* Results */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ResultCard label="Collateral value" value={collateralUsdAfter} prefix="$" decimals={0} sub={`from $${collateralUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })}`} />
+        <ResultCard label="LTV after" value={ltvAfter} suffix="%" decimals={2} tone={ltvAfter > cfg.ltv ? "red" : "default"} />
+        <ResultCard label="Health Factor" value={hfAfter} decimals={2} tone={status === "safe" ? "green" : status === "warning" ? "amber" : "red"} />
+        <ResultCard
+          label="Liquidation status"
+          valueText={status === "safe" ? "Safe" : status === "warning" ? "At Risk" : "Liquidatable"}
+          tone={status === "safe" ? "green" : status === "warning" ? "amber" : "red"}
+        />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label="Estimated loss if liquidated" value={`$${estLoss.toLocaleString("en-US", { maximumFractionDigits: 0 })}`} tone={estLoss > 0 ? "danger" : "success"} />
-        <Metric label="Reserve coverage" value={`${reserveCoverage.toFixed(2)}%`} sub="of total borrows" />
-        <Metric label="Depositor loss estimate (pool)" value={`~${depositorLossPct.toFixed(1)}%`} tone={depositorLossPct > 0 ? "danger" : "success"} sub="demo — fund NAV can decline" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <ResultCard label="Estimated loss if liquidated" value={estLoss} prefix="$" decimals={0} tone={estLoss > 0 ? "red" : "green"} big />
+        <ResultCard label="Reserve coverage" value={reserveCoverage} suffix="%" decimals={2} sub="of total borrows" />
+        <ResultCard label="Depositor loss estimate (pool)" value={depositorLossPct} prefix="~" suffix="%" decimals={1} tone={depositorLossPct > 0 ? "red" : "green"} big sub="demo — fund NAV can decline" />
       </div>
 
-      {/* Tier comparison table */}
+      {/* Heatmap */}
       <div>
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">
-          Tier comparison — {formatEth(BigInt(Math.floor(collateralEth * 1e18)))} ETH collateral
+        <h2 className="mb-3 font-display text-xl font-bold text-slate-800">
+          Tier comparison — {collateralEth.toLocaleString("en-US", { maximumFractionDigits: 2 })} ETH collateral
         </h2>
-        <div className="card overflow-x-auto p-4">
+        <div className="card card-hover overflow-x-auto p-4">
           <table className="w-full text-center text-sm">
             <thead>
-              <tr className="text-slate-400">
-                <th className="px-3 py-2 text-left">Tier</th>
+              <tr className="text-slate-500">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide">Tier</th>
                 {DROPS.map((d) => (
-                  <th key={d} className="px-3 py-2">
+                  <th key={d} className="px-3 py-2 text-xs font-semibold">
                     -{d}%
                   </th>
                 ))}
@@ -143,17 +159,23 @@ export default function StressTestPage() {
             </thead>
             <tbody>
               {table.map((r) => (
-                <tr key={r.tier} className="border-t border-border">
-                  <td className="px-3 py-2 text-left text-slate-300">
+                <tr key={r.tier} className="border-t border-slate-200/70">
+                  <td className="px-3 py-2 text-left text-slate-700">
                     T{r.tier} · LTV {r.ltv}%
                   </td>
-                  {r.cells.map((s, i) => (
-                    <td key={i} className="px-3 py-2">
-                      <span className={`inline-block rounded-full px-2 py-1 text-xs ${STATUS_STYLE[s]}`}>
-                        {s === "safe" ? "Safe" : s === "warning" ? "At Risk" : "Liquidatable"}
-                      </span>
-                    </td>
-                  ))}
+                  {r.cells.map((s, i) => {
+                    const h = HEAT[s];
+                    return (
+                      <td key={i} className="px-2 py-2">
+                        <span
+                          className="inline-block w-full rounded-lg px-2 py-1.5 text-xs font-semibold"
+                          style={{ backgroundColor: h.bg, color: h.text }}
+                        >
+                          {h.label}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -163,34 +185,66 @@ export default function StressTestPage() {
           Simulation only. Health Factor &lt; 1 means liquidation may occur.
         </p>
       </div>
+
+      {/* status banner */}
+      <div
+        className="card flex items-center justify-between p-5"
+        style={{ borderColor: statusColor, boxShadow: `0 8px 24px ${statusColor}22` }}
+      >
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Health factor after -{drop}%</div>
+          <div className="font-display text-3xl font-bold" style={{ color: statusColor }}>
+            <CountUp value={hfAfter} decimals={2} />
+          </div>
+        </div>
+        <span className="rounded-xl px-4 py-2 text-sm font-bold" style={{ backgroundColor: statusColor, color: "#fff" }}>
+          {status === "safe" ? "Safe" : status === "warning" ? "At Risk" : "Liquidatable"}
+        </span>
+      </div>
     </div>
   );
 }
 
-function Metric({
+function ResultCard({
   label,
   value,
+  valueText,
+  prefix = "",
+  suffix = "",
+  decimals = 2,
   sub,
-  tone,
+  tone = "default",
+  big,
 }: {
   label: string;
-  value: string;
+  value?: number;
+  valueText?: string;
+  prefix?: string;
+  suffix?: string;
+  decimals?: number;
   sub?: string;
-  tone?: "success" | "warning" | "danger" | "default";
+  tone?: "default" | "green" | "amber" | "red";
+  big?: boolean;
 }) {
-  const cls =
-    tone === "success"
-      ? "text-success"
-      : tone === "warning"
-        ? "text-warning"
-        : tone === "danger"
-          ? "text-danger"
-          : "text-slate-100";
+  const color =
+    tone === "green"
+      ? "text-emerald-600"
+      : tone === "amber"
+        ? "text-amber-600"
+        : tone === "red"
+          ? "text-red-600"
+          : "text-slate-900";
   return (
-    <div className="card p-4">
+    <div className="card card-hover p-5">
       <div className="stat-title">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${cls}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
+      <div className={`mt-1 font-bold ${big ? "text-3xl" : "text-2xl"} ${color}`}>
+        {valueText ? (
+          valueText
+        ) : (
+          <CountUp value={value ?? 0} decimals={decimals} prefix={prefix} suffix={suffix} />
+        )}
+      </div>
+      {sub && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
     </div>
   );
 }

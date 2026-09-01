@@ -7,6 +7,7 @@ import { LendingPoolAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_BORROW, TIERS } from "@/lib/config";
 import { useUserPosition, useMaxBorrowable, useBorrowAprs } from "@/lib/hooks";
 import { formatUsdc, formatApy, formatHealthFactor, hfTone } from "@/lib/format";
+import { YieldBreakdown } from "@/components/YieldBreakdown";
 import { TxStatus } from "./TxStatus";
 
 export function BorrowTab({ initialTier }: { initialTier: number }) {
@@ -64,7 +65,7 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
               className={`rounded-lg border px-1 py-2 text-center text-xs ${
                 tier === t.tier
                   ? "border-accent bg-accent/10 text-white"
-                  : "border-border text-slate-400 hover:border-accent"
+                  : "border-slate-200/70 text-slate-500 hover:border-accent"
               }`}
             >
               {t.ltv}%
@@ -98,22 +99,22 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
 
       <div className="space-y-1 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Borrow APR (tier {tier})</span>
-          <span className="text-slate-100">{formatApy(borrowApr)}</span>
+          <span className="text-slate-500">Borrow APR (tier {tier})</span>
+          <span className="text-slate-800">{formatApy(borrowApr)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Max LTV</span>
-          <span className="text-slate-100">{cfg.ltv}%</span>
+          <span className="text-slate-500">Max LTV</span>
+          <span className="text-slate-800">{cfg.ltv}%</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">LTV after borrow</span>
-          <span className={projLtv > cfg.ltv ? "text-danger" : "text-slate-100"}>
+          <span className="text-slate-500">LTV after borrow</span>
+          <span className={projLtv > cfg.ltv ? "text-danger" : "text-slate-800"}>
             {projLtv.toFixed(2)}%
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Health Factor after</span>
-          <span className={hfTone(projHfBig) === "danger" ? "text-danger" : "text-slate-100"}>
+          <span className="text-slate-500">Health Factor after</span>
+          <span className={hfTone(projHfBig) === "danger" ? "text-danger" : "text-slate-800"}>
             {formatHealthFactor(projHfBig)}
           </span>
         </div>
@@ -122,21 +123,14 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
       {/* Yield breakdown */}
       <div>
         <button
-          className="text-sm text-accentlight hover:underline"
+          className="text-sm font-medium text-accent hover:underline"
           onClick={() => setShowBreakdown((v) => !v)}
         >
           {showBreakdown ? "▾" : "▸"} Yield breakdown (estimated)
         </button>
         {showBreakdown && grossYield !== undefined && (
-          <div className="mt-2 space-y-1 rounded-lg bg-bg p-3 text-sm">
-            <Row k="Gross Yield" v={`~${grossYield.toFixed(2)}%`} />
-            <Row k="Expected Loss" v={`~${(grossYield * 0.12).toFixed(2)}%`} />
-            <Row k="Protocol Fee" v={`~${(grossYield * 0.03).toFixed(2)}%`} />
-            <Row k="Reserve" v={`~${(grossYield * 0.05).toFixed(2)}%`} />
-            <Row k="Estimated Net APY" v={formatApy(grossYield * 0.8)} accent />
-            <p className="text-[11px] text-slate-600">
-              Estimates only — not a guarantee of return.
-            </p>
+          <div className="mt-2 rounded-xl bg-white/60 p-3 ring-1 ring-slate-200/60">
+            <YieldBreakdown gross={grossYield} />
           </div>
         )}
       </div>
@@ -157,27 +151,18 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
       </button>
       <TxStatus hash={hash} />
 
-      <div className="border-t border-border pt-3 text-sm">
+      <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Current debt</span>
-          <span className="text-slate-100">{formatUsdc(debt / BigInt(1e12))}</span>
+          <span className="text-slate-500">Current debt</span>
+          <span className="text-slate-800">{formatUsdc(debt / BigInt(1e12))}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Current tier</span>
-          <span className="text-slate-100">
+          <span className="text-slate-500">Current tier</span>
+          <span className="text-slate-800">
             {position && position.tier > 0n ? `Tier ${Number(position.tier)}` : "None"}
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Row({ k, v, accent }: { k: string; v: string; accent?: boolean }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-slate-400">{k}</span>
-      <span className={accent ? "text-success" : "text-slate-100"}>{v}</span>
     </div>
   );
 }

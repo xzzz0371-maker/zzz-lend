@@ -3,37 +3,112 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  @apply bg-bg text-slate-200 antialiased;
+  color: #0f172a;
+  background:
+    radial-gradient(1100px 500px at 15% -5%, rgba(96, 165, 250, 0.18), transparent 60%),
+    radial-gradient(900px 450px at 90% 0%, rgba(52, 211, 153, 0.12), transparent 55%),
+    linear-gradient(180deg, #f4f6fb 0%, #eaf0fa 100%);
+  background-attachment: fixed;
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 @layer components {
   .card {
-    @apply bg-card border border-border rounded-xl;
+    @apply relative rounded-2xl;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-3px);
+    border-color: rgba(59, 130, 246, 0.35);
+    box-shadow: 0 4px 8px rgba(15, 23, 42, 0.05), 0 16px 40px rgba(59, 130, 246, 0.16);
   }
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accentlight disabled:hover:bg-accent;
+    @apply btn text-white;
+    background-image: linear-gradient(135deg, #60a5fa, #3b82f6);
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 8px 26px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
   }
   .btn-outline {
-    @apply btn border border-border text-slate-300 hover:border-accent hover:text-white;
+    @apply btn text-slate-700;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(15, 23, 42, 0.14);
+  }
+  .btn-outline:hover:not(:disabled) {
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #2563eb;
   }
   .input {
-    @apply w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-slate-200 outline-none focus:border-accent;
+    @apply w-full rounded-xl px-3 py-2 text-sm text-slate-800 outline-none transition-shadow;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+  }
+  .input:focus {
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
   }
   .label {
-    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400;
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
   }
   .stat-title {
-    @apply text-xs font-medium uppercase tracking-wide text-slate-400;
+    @apply text-xs font-semibold uppercase tracking-wide text-slate-500;
   }
   .stat-value {
-    @apply mt-1 text-lg font-semibold text-slate-100;
+    @apply mt-1 text-2xl font-bold text-slate-900;
   }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(15,23,42,0.06) 25%, rgba(15,23,42,0.12) 37%, rgba(15,23,42,0.06) 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.3s infinite linear;
+}
+
+/* Page transition */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.35s ease both;
 }

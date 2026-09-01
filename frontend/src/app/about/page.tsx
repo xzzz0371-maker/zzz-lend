@@ -17,13 +17,13 @@ export default function AboutPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       <section>
         <h1 className="text-2xl font-bold text-white">About ZZZ Lend</h1>
-        <p className="mt-3 text-sm leading-relaxed text-slate-400">
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
           ZZZ Lend is a risk-layered DeFi lending protocol. Depositors supply USDC and earn dynamic
           estimated yield; borrowers collateralize ETH and choose one of five LTV risk tiers
           (50–80%). The system prices risk in real time: higher tiers mean higher borrowing power,
           higher estimated yields — and higher risk.
         </p>
-        <p className="mt-3 text-sm leading-relaxed text-slate-400">
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
           Bad debt beyond the risk reserve is shared by all depositors proportionally, similar to a
           fund whose NAV can decline. The risk reserve targets 3% of total borrows; excess reserve
           is automatically diverted to the treasury.
@@ -31,8 +31,8 @@ export default function AboutPage() {
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">Risk Disclosure</h2>
-        <ul className="list-disc space-y-2 pl-5 text-sm text-slate-400">
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Risk Disclosure</h2>
+        <ul className="list-disc space-y-2 pl-5 text-sm text-slate-500">
           <li>
             <strong className="text-slate-200">Bad debt risk:</strong> deposits are not guaranteed.
             If bad debt exceeds the risk reserve, your principal may decrease.
@@ -57,22 +57,22 @@ export default function AboutPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">Deployed Contracts (Sepolia)</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-800">Deployed Contracts (Sepolia)</h2>
         <div className="card overflow-x-auto p-4">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="text-slate-400">
+              <tr className="text-slate-500">
                 <th className="px-2 py-2">Contract</th>
                 <th className="px-2 py-2">Address</th>
               </tr>
             </thead>
             <tbody>
               {CONTRACTS.map((c) => (
-                <tr key={c.name} className="border-t border-border">
+                <tr key={c.name} className="border-t border-slate-200/70">
                   <td className="px-2 py-2 text-slate-300">{c.name}</td>
                   <td className="px-2 py-2">
                     <a
-                      className="text-accentlight hover:underline"
+                      className="text-accent hover:underline"
                       href={`${ETHERSCAN_URL}/address/${c.addr}`}
                       target="_blank"
                       rel="noreferrer"
@@ -88,15 +88,15 @@ export default function AboutPage() {
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-2 text-lg font-semibold text-slate-100">Audit Status</h2>
-        <p className="text-sm text-slate-400">
+        <h2 className="mb-2 text-lg font-semibold text-slate-800">Audit Status</h2>
+        <p className="text-sm text-slate-500">
           Security review completed, pending third-party audit.
         </p>
       </section>
 
       <section className="card border-danger/40 p-5">
         <h2 className="mb-2 text-lg font-semibold text-danger">Disclaimer</h2>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500">
           This is a testnet demo connected to Sepolia. It uses mock test assets and simulated
           history. Nothing on this page is an offer of financial products, and no returns are
           guaranteed. Do not use real funds.

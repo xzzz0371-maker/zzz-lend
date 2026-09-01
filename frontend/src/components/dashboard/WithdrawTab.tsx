@@ -56,11 +56,11 @@ export function WithdrawTab() {
         </p>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-400">Remaining deposit after</span>
-        <span className="text-slate-100">{formatUsdc(remaining)} USDC</span>
+        <span className="text-slate-500">Remaining deposit after</span>
+        <span className="text-slate-800">{formatUsdc(remaining)} USDC</span>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-400">Available liquidity</span>
+        <span className="text-slate-500">Available liquidity</span>
         <span className={liquidityOk ? "text-success" : "text-danger"}>
           {formatUsdc(stats?.cash)} USDC
         </span>
@@ -85,10 +85,10 @@ export function WithdrawTab() {
         {isPending ? "Withdrawing…" : "Withdraw"}
       </button>
       <TxStatus hash={hash} />
-      <div className="border-t border-border pt-3 text-sm">
+      <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Your supply shares</span>
-          <span className="text-slate-100">{position ? formatUsdc(position.shares) : "--"}</span>
+          <span className="text-slate-500">Your supply shares</span>
+          <span className="text-slate-800">{position ? formatUsdc(position.shares) : "--"}</span>
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/providers";
 import { NavBar } from "@/components/NavBar";
+import { Footer } from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: "ZZZ Lend — Risk-Layered DeFi Lending",
@@ -14,16 +15,19 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>
         <Providers>
           <NavBar />
-          <main className="mx-auto min-h-[80vh] max-w-6xl px-4 py-6">{children}</main>
-          <footer className="border-t border-border py-6">
-            <div className="mx-auto max-w-6xl px-4 text-center text-xs text-slate-500">
-              ZZZ Lend is a testnet demo. Deposits are not guaranteed — your principal may
-              decrease due to bad debt. All APY figures are estimates.
-            </div>
-          </footer>
+          <main className="fade-in mx-auto min-h-[72vh] max-w-6xl px-4 py-8">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>

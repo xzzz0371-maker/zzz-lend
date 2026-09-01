@@ -15,23 +15,23 @@ const links = [
 export function NavBar() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-bg/80 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-white/60 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent text-sm font-bold text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-blue-600 text-sm font-bold text-white shadow-lg shadow-accent/30">
             Z
           </span>
-          <span className="text-base font-bold text-slate-100">ZZZ Lend</span>
+          <span className="font-display text-lg font-bold text-slate-900">ZZZ Lend</span>
         </Link>
         <nav className="hidden items-center gap-1 md:flex">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className={`rounded-lg px-3 py-1.5 text-sm ${
+              className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
                 pathname === l.href
-                  ? "bg-border text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "bg-white text-accent shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
               }`}
             >
               {l.label}
@@ -39,21 +39,20 @@ export function NavBar() {
           ))}
         </nav>
         <div className="flex items-center gap-3">
-          <span className="hidden items-center gap-1.5 rounded-full bg-success/10 px-2 py-1 text-xs text-success sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+          <span className="pill bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 hidden sm:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Sepolia Testnet
           </span>
           <ConnectButton />
         </div>
       </div>
-      {/* mobile nav */}
       <nav className="flex items-center gap-1 overflow-x-auto px-4 pb-2 md:hidden">
         {links.map((l) => (
           <Link
             key={l.href}
             href={l.href}
-            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm ${
-              pathname === l.href ? "bg-border text-white" : "text-slate-400"
+            className={`whitespace-nowrap rounded-xl px-3 py-1.5 text-sm font-medium ${
+              pathname === l.href ? "bg-white text-accent shadow-sm" : "text-slate-500"
             }`}
           >
             {l.label}

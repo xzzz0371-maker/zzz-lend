@@ -2,19 +2,13 @@
 
 import { UserPosition } from "@/lib/hooks";
 import { TIERS } from "@/lib/config";
-import { formatEth, formatUsdc, formatWadPct, formatHealthFactor, hfTone } from "@/lib/format";
-
-const toneText: Record<"success" | "warning" | "danger", string> = {
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-};
+import { HFBar } from "@/components/HFBar";
 
 export function PositionPanel({ position }: { position?: UserPosition }) {
   if (!position) {
     return (
-      <div className="card p-5">
-        <h2 className="mb-3 text-lg font-semibold text-slate-100">Your Position</h2>
+      <div className="card p-6">
+        <h2 className="mb-3 font-display text-lg font-bold text-slate-800">Your Position</h2>
         <p className="text-sm text-slate-500">
           Connect your wallet and supply collateral or borrow to see your position here.
         </p>
@@ -22,63 +16,61 @@ export function PositionPanel({ position }: { position?: UserPosition }) {
     );
   }
 
-  const collateralEth = Number(position.collateral) / 1e18;
   const collateralUsd = Number(position.collateralValue) / 1e18;
   const debtUsdc = Number(position.debt) / 1e18;
   const tier = Number(position.tier);
   const cfg = TIERS.find((t) => t.tier === tier);
   const ltvPct = collateralUsd > 0 ? (debtUsdc / collateralUsd) * 100 : 0;
-  const hf = position.healthFactor;
-  const hfToneResult = hfTone(position.healthFactor);
-  const hfColor = toneText[hfToneResult];
+  const hfNum = Number(position.healthFactor) / 1e18;
+  const hfDisplay = position.healthFactor > BigInt(1e30) ? Number.MAX_SAFE_INTEGER : hfNum;
 
   return (
-    <div className="card p-5">
-      <h2 className="mb-4 text-lg font-semibold text-slate-100">Your Position</h2>
-      <dl className="space-y-3 text-sm">
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Collateral</dt>
-          <dd className="text-slate-100">
-            {formatEth(position.collateral)} ETH{" "}
-            <span className="text-slate-500">(${collateralUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })})</span>
-          </dd>
+    <div className="card p-6">
+      <h2 className="mb-5 font-display text-lg font-bold text-slate-800">Your Position</h2>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="rounded-xl bg-white/60 p-4 ring-1 ring-slate-200/60">
+          <div className="stat-title">Collateral</div>
+          <div className="mt-1 text-xl font-bold text-slate-900">
+            {(Number(position.collateral) / 1e18).toLocaleString("en-US", { maximumFractionDigits: 4 })} ETH
+          </div>
+          <div className="text-xs text-slate-500">${collateralUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })}</div>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Debt</dt>
-          <dd className="text-slate-100">{debtUsdc.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC</dd>
+        <div className="rounded-xl bg-white/60 p-4 ring-1 ring-slate-200/60">
+          <div className="stat-title">Debt</div>
+          <div className="mt-1 text-xl font-bold text-slate-900">
+            {debtUsdc.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC
+          </div>
+          <div className="text-xs text-slate-500">Current LTV {ltvPct.toFixed(2)}%</div>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Current LTV</dt>
-          <dd className="text-slate-100">{formatAmountPct(ltvPct)}</dd>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-xl bg-white/60 p-3 ring-1 ring-slate-200/60">
+          <div className="stat-title">Max LTV</div>
+          <div className="mt-1 text-lg font-bold text-slate-900">{cfg ? `${cfg.ltv}%` : "--"}</div>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Max LTV</dt>
-          <dd className="text-slate-100">{cfg ? `${cfg.ltv}%` : "--"}</dd>
+        <div className="rounded-xl bg-white/60 p-3 ring-1 ring-slate-200/60">
+          <div className="stat-title">Liq. Threshold</div>
+          <div className="mt-1 text-lg font-bold text-slate-900">{cfg ? `${cfg.lt}%` : "--"}</div>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Liquidation Threshold</dt>
-          <dd className="text-slate-100">{cfg ? `${cfg.lt}%` : "--"}</dd>
+        <div className="rounded-xl bg-white/60 p-3 ring-1 ring-slate-200/60">
+          <div className="stat-title">Tier</div>
+          <div className="mt-1 text-lg font-bold text-slate-900">
+            {position.tier > 0n ? `T${Number(position.tier)} · ${cfg?.ltv}%` : "None"}
+          </div>
         </div>
-        <div className="flex justify-between items-center">
-          <dt className="text-slate-400">Health Factor</dt>
-          <dd className={`text-lg font-semibold ${hfColor}`}>{formatHealthFactor(hf)}</dd>
-        </div>
-        <div className="flex justify-between">
-          <dt className="text-slate-400">Current Tier</dt>
-          <dd className="text-slate-100">
-            {cfg ? `${cfg.label}` : "No active borrow"}
-          </dd>
-        </div>
-      </dl>
+      </div>
+
+      <div className="mt-5">
+        <HFBar hf={hfDisplay} />
+      </div>
+
       {position.liquidatable && (
-        <div className="mt-3 rounded-lg bg-danger/15 px-3 py-2 text-sm text-danger">
+        <div className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
           Your position is liquidatable. Add collateral or repay immediately.
         </div>
       )}
     </div>
   );
-}
-
-function formatAmountPct(n: number) {
-  return `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
 }

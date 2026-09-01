@@ -57,12 +57,12 @@ export function RepayTab() {
         <p className="mt-1 text-xs text-slate-500">Current debt: {formatUsdc(debtRaw)} USDC</p>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-400">Remaining debt after</span>
-        <span className="text-slate-100">{formatUsdc(remaining)} USDC</span>
+        <span className="text-slate-500">Remaining debt after</span>
+        <span className="text-slate-800">{formatUsdc(remaining)} USDC</span>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-400">Health Factor after</span>
-        <span className={hfTone(projHfBig) === "danger" ? "text-danger" : "text-slate-100"}>
+        <span className="text-slate-500">Health Factor after</span>
+        <span className={hfTone(projHfBig) === "danger" ? "text-danger" : "text-slate-800"}>
           {formatHealthFactor(projHfBig)}
         </span>
       </div>
@@ -98,14 +98,14 @@ export function RepayTab() {
         </button>
       )}
       <TxStatus hash={hash} />
-      <div className="border-t border-border pt-3 text-sm">
+      <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Current debt</span>
-          <span className="text-slate-100">{formatUsdc(debtRaw)} USDC</span>
+          <span className="text-slate-500">Current debt</span>
+          <span className="text-slate-800">{formatUsdc(debtRaw)} USDC</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Accrued interest included</span>
-          <span className="text-slate-100">Yes (in debt)</span>
+          <span className="text-slate-500">Accrued interest included</span>
+          <span className="text-slate-800">Yes (in debt)</span>
         </div>
       </div>
     </div>

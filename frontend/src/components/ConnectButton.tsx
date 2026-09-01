@@ -41,11 +41,15 @@ export function ConnectButton() {
     return (
       <div className="flex items-center gap-2">
         {chainId !== 11155111 && (
-          <span className="rounded-full bg-danger/20 px-2 py-1 text-xs text-danger">
+          <span className="pill bg-red-50 text-red-600 ring-1 ring-red-200">
             Wrong network — switch to Sepolia
           </span>
         )}
-        <button onClick={() => setOpen((v) => !v)} className="btn-outline">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="btn-outline"
+        >
+          <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />
           {truncateAddress(address)}
         </button>
         {open && (
@@ -54,7 +58,7 @@ export function ConnectButton() {
               disconnect();
               setOpen(false);
             }}
-            className="btn-outline text-danger"
+            className="btn-outline text-red-600"
           >
             Disconnect
           </button>
@@ -65,11 +69,7 @@ export function ConnectButton() {
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="btn-primary"
-        type="button"
-      >
+      <button onClick={() => setOpen((v) => !v)} className="btn-primary" type="button">
         Connect Wallet
       </button>
 
@@ -77,10 +77,10 @@ export function ConnectButton() {
         <div className="card absolute right-0 z-20 mt-2 w-64 p-2">
           {!hasWallet ? (
             <div className="space-y-2 p-2 text-center">
-              <p className="text-sm text-warning">No wallet detected</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm font-medium text-amber-600">No wallet detected</p>
+              <p className="text-xs text-slate-500">
                 Install the MetaMask browser extension (or another injected wallet), then refresh
-                this page and connect again.
+                and connect again.
               </p>
             </div>
           ) : (
@@ -89,17 +89,19 @@ export function ConnectButton() {
               {connectors.map((c) => (
                 <button
                   key={c.id}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-200 hover:bg-border disabled:opacity-50"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-accent/10 disabled:opacity-50"
                   disabled={connectingId !== null}
                   onClick={() => handleConnect(c)}
                   type="button"
                 >
-                  <span className="h-2 w-2 rounded-full bg-accent" />
+                  <span className="h-2 w-2 rounded-full bg-gradient-to-r from-accent to-blue-600" />
                   <span className="flex-1">{c.name}</span>
-                  {connectingId === c.id && <span className="text-xs text-slate-400">connecting…</span>}
+                  {connectingId === c.id && (
+                    <span className="animate-pulse text-xs text-slate-500">connecting…</span>
+                  )}
                 </button>
               ))}
-              {errorMsg && <p className="px-2 pb-1 pt-1 text-xs text-danger">{errorMsg}</p>}
+              {errorMsg && <p className="px-2 pb-1 pt-1 text-xs text-red-600">{errorMsg}</p>}
             </div>
           )}
         </div>
