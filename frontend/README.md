@@ -14,9 +14,31 @@ npm run dev        # http://localhost:3000
 For a production build:
 
 ```bash
-npm run build
-npm start
+npm run build      # outputs to out/ (static HTML export)
+npm start          # serve out/ locally (needs `serve`)
 ```
+
+### Cloudflare Pages deployment
+
+The app is configured for **static HTML export** (`output: "export"` in `next.config.mjs`), so it runs
+on Cloudflare Pages without a Node.js runtime.
+
+**Option A — GitHub integration (dashboard, recommended):**
+1. Push this repo to GitHub.
+2. Cloudflare Pages → Create project → **Connect to Git** → select the repo.
+3. Framework preset: **Next.js (Static HTML Export)**.
+4. Build command: `npm run build` ｜ Build output directory: `out`.
+5. Deploy.
+
+**Option B — Wrangler CLI:**
+```bash
+npx wrangler login          # once
+npm run deploy:cf           # = wrangler pages deploy out --project-name=zzz-lend
+```
+
+> Note: `pages.dev` may also be blocked in some regions — for reliable access from China, connect
+> a custom domain to the project. The app reads contract data over HTTPS RPC at runtime; if the
+> default Sepolia RPC is unreachable from your region, set `NEXT_PUBLIC_RPC_URL` at build time.
 
 ### Environment variables (optional)
 
