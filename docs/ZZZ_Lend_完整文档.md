@@ -2,7 +2,7 @@
 
 > **单一总文档**：汇总产品、架构、合约、阶段进度、测试、安全、部署与待办（原分阶段/交接/配置文档已并入后删除）。
 > 归总日期：2026-08-29
-> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7 已部署 Sepolia（2026-08-31）+ 阶段 8 前端已实现（2026-09-01，见 `frontend/README.md`），待链上 E2E/清算演示 ｜ 测试：22 suites / 163 passed（行覆盖：LendingPool 91.8% / LiquidationManager 100% / RiskManager 100%）
+> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7 已部署 Sepolia（2026-08-31）+ 阶段 8 前端已实现（2026-09-01，见 `frontend/README.md`）+ Early Deposit Boost 已实现（§3.5） ｜ 测试：23 suites / 173 passed（行覆盖：LendingPool 91.8% / LiquidationManager 100% / RiskManager 100%）
 
 ---
 
@@ -247,7 +247,7 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 ## 3.3 资金流与不变式 — v1.0 · 2026-08-31
 
 - 资金流：存款人 USDC → 池 → 借款人；借款人 ETH → 抵押（独立记账）；利息 → 存款人 92% + 风险储备 5% + Treasury 3%。
-- **核心不变式**：`cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued`（每笔操作后测试断言）。
+- **核心不变式**：`cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued + boostPool`（每笔操作后测试断言）。
 - 坏账（即时传导）：抵押归零仍有债 → `handleBadDebt`（任何人可调）先由风险储备（第一损失缓冲）覆盖可覆盖部分，未覆盖部分即时降低 `supplyIndex`，由所有存款人按份额承担损失；仓位一次性清零，**不挂账、无 `settleBadDebt`**。事件 `BadDebtRealized(user, badDebtAmount, coveredByReserve, lossToDepositors, oldSupplyIndex, newSupplyIndex)`。
 - 储备溢出：每次计息后，储备总资产（账面 + 物理）超过 `totalBorrows × 3%` 的部分溢出转 Treasury（事件 `ReserveOverflowTransferred`）；溢出只从**账面 `totalReserve`** 划转，物理储备仅由坏账消耗；`totalBorrows = 0` 时不触发溢出，储备保留。
 - 清算：HF<1 可清算，close factor 50%，清算人按 105% 估值没收 ETH；`liquidate(...,minSeizeAmount)` 支持最低没收量（0=不限）。
@@ -259,6 +259,28 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 - 管理员能：改参数/换模块地址/暂停/切预设；**不能**：动用户存款/抵押、绕过 LTV/HF/清算规则、注入任意价格、直接降低 `supplyIndex`（只能经 `handleBadDebt` 触发）、RiskEngine 不触碰资金。
 - 风险引擎：只输出风险等级与建议，参数调整必须 PARAM_ADMIN/PAUSER 手动执行。
 
+## 3.5 Early Deposit Boost（早期存款加成）— v1.0 · 2026-09-01
+
+**目标**：上线前 6 个月内，吸引早期存款。存款人来自 **Tier 1 / Tier 2** 借款人利息的分摊收益若低于 2% APY，则从保底基金补足到 2%。**只补利息、不保本金**（坏账损失不补）。
+
+**规则**
+- 保底利率 `boostRate` = **2%**；窗口 = `boostStartTime` ~ `boostEndTime`（建议 6 个月）。
+- 覆盖上限 `boostCapPerWallet` = **10,000 USDC**（每钱包按当前存款与上限取小）。
+- **Tier 3/4/5 借款利息不参与保底核算**（`tier345Interest` 只记账，不影响保底）。
+- 资金来源：Treasury 专项预算（建议预留 5 万 USDC）→ `fundBoost()` 注入 `boostPool`。
+
+**核心状态**：`tier12Interest` / `tier345Interest`（分档累计利息）、`boostBaseIndex`（仅跟踪 Tier1+2 利息中存款人所得部分的基准指数）、`boostPool`、`boostStartTime` / `boostEndTime`、`boostRate`、`boostCapPerWallet`、`userBoostClaimed` / `userBoostBaseIndexAtClaim` / `userBoostLastClaimAt`。
+
+**函数**
+- `setBoostParams(start, end, rate, cap)`：PARAM_ADMIN 配置。
+- `fundBoost(amount)`：PARAM_ADMIN 注入保底基金（计入现金背书，参与守恒）。
+- `claimBoost(user)`：任何人可为用户领取补差 = `合格存款 × 2% × Δt/年 − Tier1+2 利息中该用户已得部分`（超额上限外部分按比例归属）。
+- `getBoostStatus(user)`：返回（合格存款, 已领取, 剩余额度, 保底基金余额, 剩余时间）。
+
+**守恒**：不变式更新为 `cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued + boostPool`。`fundBoost` 现金与 `boostPool` 同步增减；`claimBoost` 从 `boostPool` 与现金扣减并转给用户。
+
+**测试**：`test/Boost.t.sol`（10 用例）覆盖利用率 0/10/50%、1 万上限、到期、Tier345 不参与、参数权限、多次领取、守恒。
+
 ---
 
 # 第 4 部分 测试体系与结果
@@ -266,8 +288,8 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 ## 4.1 测试总览 — 2026-08-31（每次跑完测试更新本表日期/用例数）
 
 ```
-forge test:  22 suites, 163 passed, 0 failed, 0 skipped
-forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性）
+forge test:  23 suites, 173 passed, 0 failed, 0 skipped
+forge fmt --check: 通过 ｜ npm run lint: 0 errors（393 warnings，风格性）
 ```
 
 | 测试文件 | 用例 | 覆盖 |
@@ -292,6 +314,7 @@ forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性�
 | LiquidationTimeGap.t.sol | 1(9场景) | 1h/6h/24h × 续跌5/10/20%：利息累计/坏账扩大/守恒 |
 | BadDebt.t.sol | 9 | 坏账即时传导：储备充足 supplyIndex 不变 / 储备不足与为零时降 supplyIndex / 多存款人等比例受损 / 坏账后取款与利息累计 / 管理员不可直改 supplyIndex / 零坏账无状态变化 / BadDebtRealized 事件 |
 | SecurityFixes.t.sol | 20 | 审计 v1.1 修复回归（F1 取整下溢 / F3 setPrice 校验 / F4 零地址 / F2 超额损失守恒 / F5 实时偏差 / F9 oracle 暂停清算）+ v1.2 最小金额限制（MIN_SUPPLY/MIN_BORROW/MIN_COLLATERAL） |
+| Boost.t.sol | 10 | Early Deposit Boost：利用率 0/10/50% 保底/抵扣/无保底、1 万上限、到期、Tier345 不参与、参数权限、多次领取、守恒 |
 | FeeMechanism.t.sol | 12 | 固定费率 92/5/3 合计100%；储备未达标无溢出/达标溢出转Treasury/恰达目标新增5%全溢出/坏账消耗储备后溢出停止/借款增减改变目标/totalBorrows=0 不溢出储备保留/collectTreasury 转账与零地址revert/溢出事件/参数边界 |
 | MinSeize.t.sol | 3 | minSeize 通过/不足 revert/0 不限制 |
 
@@ -342,7 +365,7 @@ forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性�
 | 风险引擎建议不自动执行 | 依赖管理员及时响应 | 前端监控告警 |
 | 偏差容忍的副作用 | 极端跳价会以异常价执行（为保清算） | 事件监控 + PAUSER 暂停兜底 |
 | liquidity 无挂钩 | RiskEngine 手动参数可被伪造；`calculateRiskLevelAuto` 从池直读（已有 0~1 校验） | 前端展示用 Auto |
-| lint 风格 | 369 warnings（require→custom errors 等） | 后续优化 |
+| lint 风格 | 393 warnings（require→custom errors 等） | 后续优化 |
 | 未经外部审计 | — | 阶段 8 审计 |
 
 ---

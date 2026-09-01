@@ -84,6 +84,7 @@ LHS2=$(cast call $POOL "getTotalBorrows()(uint256)" --rpc-url "$RPC" | p0)
 RHS=$(cast call $POOL "getTotalSupply()(uint256)" --rpc-url "$RPC" | p0)
 RHS2=$(cast call $POOL "totalReserve()(uint256)" --rpc-url "$RPC" | p0)
 RHS3=$(cast call $POOL "treasuryAccrued()(uint256)" --rpc-url "$RPC" | p0)
+RHS4=$(cast call $POOL "boostPool()(uint256)" --rpc-url "$RPC" | p0)
 echo "cash+borrows = $((LHS + LHS2))"
-echo "supply+reserve+treasury = $((RHS + RHS2 + RHS3))"
+echo "supply+reserve+treasury+boost = $((RHS + RHS2 + RHS3 + RHS4))"
 echo "E2E done."

@@ -124,6 +124,52 @@ export interface Prices {
   loading: boolean;
 }
 
+export interface BoostStatus {
+  eligible: bigint;
+  claimed: bigint;
+  remaining: bigint;
+  boostPoolBalance: bigint;
+  timeLeft: bigint; // seconds
+}
+
+export function useBoostStatus(user: Address | undefined) {
+  const { data, refetch } = useReadContract({
+    ...pool,
+    functionName: "getBoostStatus",
+    args: user ? [user] : undefined,
+    query: { enabled: !!user, refetchInterval: 12_000 },
+  });
+  const d = data as unknown as [bigint, bigint, bigint, bigint, bigint] | undefined;
+  const status: BoostStatus | undefined = d
+    ? { eligible: d[0], claimed: d[1], remaining: d[2], boostPoolBalance: d[3], timeLeft: d[4] }
+    : undefined;
+  return { status, refetch };
+}
+
+export function useBoostParams() {
+  const { data: rate } = useReadContract({
+    ...pool,
+    functionName: "boostRate",
+    query: { refetchInterval: 60_000 },
+  });
+  const { data: endTime } = useReadContract({
+    ...pool,
+    functionName: "boostEndTime",
+    query: { refetchInterval: 60_000 },
+  });
+  const { data: startTime } = useReadContract({
+    ...pool,
+    functionName: "boostStartTime",
+    query: { refetchInterval: 60_000 },
+  });
+  return {
+    boostRate: (rate as bigint | undefined) ?? 0n,
+    boostEndTime: (endTime as bigint | undefined) ?? 0n,
+    boostStartTime: (startTime as bigint | undefined) ?? 0n,
+  };
+}
+
+
 // Reads ETH/USD from the switchable oracle with a demo fallback if the feed is unavailable.
 export function usePrices(): Prices {
   const { data: ethRaw } = useReadContract({

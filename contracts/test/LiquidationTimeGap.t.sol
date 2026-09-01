@@ -62,7 +62,7 @@ contract LiquidationTimeGapTest is BaseSetup {
 
     function _assertInvariant() internal view {
         uint256 lhs = pool.cash() + pool.getTotalBorrows();
-        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
+        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool();
         assertTrue(lhs >= rhs ? (lhs - rhs) <= 1e7 : (rhs - lhs) <= 1e7, "invariant broken");
     }
 }

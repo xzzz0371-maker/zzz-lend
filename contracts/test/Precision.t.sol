@@ -6,7 +6,7 @@ import {BaseSetup} from "./BaseSetup.t.sol";
 contract PrecisionTest is BaseSetup {
     function _assertInvariant() internal view {
         uint256 lhs = pool.cash() + pool.getTotalBorrows();
-        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
+        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool();
         assertTrue(lhs >= rhs ? (lhs - rhs) <= 1e6 : (rhs - lhs) <= 1e6, "invariant broken");
     }
 

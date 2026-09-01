@@ -5,9 +5,18 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockUSDCAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_SUPPLY } from "@/lib/config";
-import { usePoolStats, useUserPosition, useUsdcBalance, useUsdcAllowance } from "@/lib/hooks";
+import {
+  usePoolStats,
+  useUserPosition,
+  useUsdcBalance,
+  useUsdcAllowance,
+  useBoostStatus,
+  useBoostParams,
+} from "@/lib/hooks";
 import { formatUsdc, formatApy } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
+
+const SECONDS_PER_DAY = 86400;
 
 export function SupplyTab() {
   const { address } = useAccount();
@@ -19,6 +28,8 @@ export function SupplyTab() {
     address as Address,
     ADDRESSES.lendingPool as Address,
   );
+  const { status: boostStatus, refetch: refetchBoost } = useBoostStatus(address as Address);
+  const { boostRate, boostEndTime } = useBoostParams();
 
   const amountNum = parseFloat(amount);
   const raw = amountNum > 0 ? BigInt(Math.floor(amountNum * 1e6)) : 0n;
@@ -36,11 +47,73 @@ export function SupplyTab() {
         100
       : 0;
 
+  const boostEnabled = boostEndTime > 0n;
+  const boostAprPct = Number(boostRate) / 1e18 * 100;
+  const timeLeftDays = boostStatus ? Number(boostStatus.timeLeft) / SECONDS_PER_DAY : 0;
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
         Deposits are not guaranteed. Your principal may decrease due to bad debt.
       </div>
+      {boostEnabled && (
+        <div className="rounded-xl bg-emerald-50 p-3 ring-1 ring-emerald-200">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-emerald-700">Early Deposit Boost</div>
+            <span className="pill bg-emerald-100 text-emerald-700">
+              Tier 1/2 only · first 6 months
+            </span>
+          </div>
+          <div className="mt-2 flex items-end justify-between">
+            <div>
+              <div className="text-xs text-slate-500">Boosted APY floor</div>
+              <div className="font-display text-2xl font-bold text-emerald-600">
+                ~{boostAprPct.toFixed(1)}%
+              </div>
+            </div>
+            <div className="text-right text-xs text-slate-500">
+              <div>{timeLeftDays >= 0 ? `${timeLeftDays.toFixed(0)} days left` : "Boost ended"}</div>
+              <div>Cap: 10,000 USDC / wallet</div>
+            </div>
+          </div>
+          {address && (
+            <div className="mt-2 flex items-center justify-between border-t border-emerald-200/60 pt-2 text-xs">
+              <div>
+                <div className="text-slate-500">
+                  Claimed:{" "}
+                  <span className="font-semibold text-emerald-700">
+                    {boostStatus ? formatUsdc(boostStatus.claimed) : "--"} USDC
+                  </span>
+                </div>
+                <div className="text-slate-500">
+                  Remaining allowance:{" "}
+                  <span className="font-semibold text-emerald-700">
+                    {boostStatus ? formatUsdc(boostStatus.remaining) : "--"} USDC
+                  </span>
+                </div>
+              </div>
+              <button
+                className="btn-outline text-xs"
+                disabled={!position || position.shares === 0n || isPending}
+                onClick={() =>
+                  writeContract({
+                    address: ADDRESSES.lendingPool as Address,
+                    abi: LendingPoolAbi,
+                    functionName: "claimBoost",
+                    args: [address as Address],
+                  })
+                }
+              >
+                {isPending ? "Claiming…" : "Claim Boost"}
+              </button>
+            </div>
+          )}
+          <p className="mt-2 text-[11px] text-emerald-700/70">
+            Boost applies to interest only and does not protect principal. Deposits are not
+            guaranteed.
+          </p>
+        </div>
+      )}
       <div>
         <label className="label">Amount (USDC)</label>
         <input

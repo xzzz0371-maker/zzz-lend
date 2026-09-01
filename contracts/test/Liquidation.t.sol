@@ -93,7 +93,7 @@ contract LiquidationTest is BaseSetup {
         // 资金守恒：清算后（坏账传导前）
         assertApproxEqAbs(
             pool.cash() + pool.getTotalBorrows(),
-            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued(),
+            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool(),
             1e7
         );
 
@@ -119,7 +119,7 @@ contract LiquidationTest is BaseSetup {
         // 资金守恒：坏账传导后仍守恒
         assertApproxEqAbs(
             pool.cash() + pool.getTotalBorrows(),
-            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued(),
+            pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool(),
             1e7
         );
     }

@@ -106,7 +106,7 @@ contract TestnetE2E is Script {
 
         // 8. 资金守恒检查
         uint256 lhs = pool.cash() + pool.getTotalBorrows();
-        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
+        uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued() + pool.boostPool();
         bool conserved = lhs > rhs ? (lhs - rhs) < 1e6 : (rhs - lhs) < 1e6;
         console2.log("[8] conserved:", conserved, "(cash+borrows vs supply+reserve+treasury)");
 
