@@ -1,0 +1,20 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  webpack(config) {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      // MetaMask SDK pulls in react-native packages that are irrelevant on the web.
+      "@react-native-async-storage/async-storage": path.resolve(__dirname, "stubs/async-storage.js"),
+      "react-native": path.resolve(__dirname, "stubs/react-native.js"),
+    };
+    return config;
+  },
+};
+
+export default nextConfig;

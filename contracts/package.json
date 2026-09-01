@@ -1,0 +1,19 @@
+{
+  "name": "zzz-lend-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZZZ Lend - DeFi lending protocol contracts (MVP: ETH collateral / USDC deposit)",
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "test:verbose": "forge test -vvv",
+    "test:coverage": "forge coverage",
+    "format": "forge fmt",
+    "format:check": "forge fmt --check",
+    "lint": "solhint \"src/**/*.sol\" \"test/**/*.sol\" \"script/**/*.sol\"",
+    "anvil": "anvil"
+  },
+  "devDependencies": {
+    "solhint": "^5.0.5"
+  }
+}
