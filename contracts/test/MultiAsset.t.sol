@@ -8,20 +8,18 @@ import {MockToken} from "../src/mocks/MockToken.sol";
 contract MultiAssetTest is BaseSetupV2 {
     // ==================== 注册 ====================
 
-    function test_MarketsAndCollateralsRegistered() public view {
-        assertEq(pool.marketCount(), 3);
-        assertEq(pool.collateralCount(), 3);
-        assertEq(address(pool.marketAsset(M_USDC)), address(usdc));
-        assertEq(address(pool.marketAsset(M_USDT)), address(usdt));
-        assertEq(address(pool.marketAsset(M_DAI)), address(dai));
-        assertEq(pool.marketDecimals(M_DAI), 18);
-        assertEq(pool.marketDecimals(M_USDT), 6);
-        assertEq(pool.collateralToken(C_WSTETH), address(wsteth));
-        assertEq(pool.collateralToken(C_WBTC), address(wbtc));
-        // WBTC 保守档位
+    function test_MarketsAndCollateralsRegistered() public {
+        // Risk 参数：WBTC 保守档位 / wstETH 同 ETH
         assertEq(riskManager.getMaxLTV(address(wbtc), 5), 75e16);
         assertEq(riskManager.getLiquidationThreshold(address(wbtc), 5), 85e16);
         assertEq(riskManager.getMaxLTV(address(wsteth), 5), 8e17);
+        assertEq(riskManager.getMaxLTV(address(wsteth), 1), 5e17);
+        // 功能验证：每个市场/抵押品可用
+        _supplyMarket(address(usdt), M_USDT, bob, 10_000e6);
+        _supplyMarket(address(dai), M_DAI, bob, 10_000e18);
+        _supplyCollateral(alice, 1 ether);
+        _borrowMarket(M_USDT, alice, 500e6, 1);
+        assertGt(pool.userDebtToken(alice, M_USDT), 0);
     }
 
     function test_DuplicateMarketAndCollateralRejected() public {
@@ -41,8 +39,8 @@ contract MultiAssetTest is BaseSetupV2 {
         _supplyCollateral(alice, 2 ether); // 6000 USD
         _borrowMarket(M_USDT, alice, 1500e6, 2);
         assertEq(pool.userDebtToken(alice, M_USDT), 1500e6);
-        assertGt(pool.marketBorrows(M_USDT), 0);
-        assertEq(pool.marketBorrows(M_USDC), 0); // 市场隔离
+        assertGt(_marketBorrows(M_USDT), 0);
+        assertEq(_marketBorrows(M_USDC), 0); // 市场隔离
         _assertMarketConservation(M_USDT);
 
         // 部分还款
@@ -61,7 +59,7 @@ contract MultiAssetTest is BaseSetupV2 {
         uint256 bobSharesUsdt = pool.userSharesOf(bob, M_USDT);
         vm.prank(bob);
         pool.withdraw(M_USDT, bobSharesUsdt);
-        assertEq(pool.marketSupply(M_USDT), 0);
+        assertEq(_marketSupply(M_USDT), 0);
         assertEq(usdt.balanceOf(bob), 500_000e6); // 回到初始全额
         _assertMarketConservation(M_USDT);
     }
@@ -87,9 +85,9 @@ contract MultiAssetTest is BaseSetupV2 {
         _supplyCollateral(alice, 1 ether); // 3000
         _borrowMarket(M_DAI, alice, 1000e18, 1);
         assertEq(pool.userDebtToken(alice, M_DAI), 1000e18);
-        assertEq(pool.marketBorrows(M_DAI), 1000e18);
-        assertEq(pool.marketBorrows(M_USDC), 0);
-        assertEq(pool.marketBorrows(M_USDT), 0);
+        assertEq(_marketBorrows(M_DAI), 1000e18);
+        assertEq(_marketBorrows(M_USDC), 0);
+        assertEq(_marketBorrows(M_USDT), 0);
         // HF：抵押 3000 USD × LT60% / 债务 1000 = 1.8
         assertApproxEqAbs(pool.getUserHealthFactor(alice), 18e17, 1e12);
         _assertMarketConservation(M_DAI);
@@ -98,13 +96,13 @@ contract MultiAssetTest is BaseSetupV2 {
         vm.prank(alice);
         pool.repay(M_DAI, type(uint256).max);
         assertEq(pool.userDebtToken(alice, M_DAI), 0);
-        assertEq(pool.userDebtValueWad(alice), 0);
+        assertEq(pool.getDebt(alice), 0);
         _assertMarketConservation(M_DAI);
 
         uint256 bobSharesDai = pool.userSharesOf(bob, M_DAI);
         vm.prank(bob);
         pool.withdraw(M_DAI, bobSharesDai);
-        assertEq(pool.marketSupply(M_DAI), 0);
+        assertEq(_marketSupply(M_DAI), 0);
         assertEq(dai.balanceOf(bob), 500_000e18); // 回到初始全额
     }
 
@@ -115,7 +113,7 @@ contract MultiAssetTest is BaseSetupV2 {
         _borrowMarket(M_DAI, alice, 99e18, 1);
         // USDC min borrow = 100e6（默认市场）
         vm.expectRevert(bytes("amount below min"));
-        pool.borrow(99e6, 1);
+        pool.borrow(0, 99e6, 1);
         // DAI min supply = 10 整 token
         _approveToken(address(dai), alice, 10e18);
         vm.prank(alice);
@@ -221,7 +219,7 @@ contract MultiAssetTest is BaseSetupV2 {
         pool.withdrawCollateral(address(wsteth), 0.5 ether);
         // 提走小额 ETH 仍健康：剩 0.4 ETH + 0.5 wstETH → (0.4*3000+1500)*0.7/1700
         vm.prank(alice);
-        pool.withdrawCollateral(0.1 ether);
+        pool.withdrawCollateral(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 0.1 ether);
         uint256 expect2 = 1890e18 * WAD / 1700e18;
         assertApproxEqAbs(pool.getUserHealthFactor(alice), expect2, 1e12);
     }
@@ -237,9 +235,9 @@ contract MultiAssetTest is BaseSetupV2 {
         _borrowMarket(M_DAI, alice, 500e18, 1); // total 1300 ≤ 1500
         vm.expectRevert(bytes("tier locked"));
         _borrowMarket(M_USDT, alice, 100e6, 2);
-        assertEq(pool.marketBorrows(M_USDC), 800e6);
-        assertEq(pool.marketBorrows(M_DAI), 500e18);
-        assertEq(pool.marketBorrows(M_USDT), 0);
+        assertEq(_marketBorrows(M_USDC), 800e6);
+        assertEq(_marketBorrows(M_DAI), 500e18);
+        assertEq(_marketBorrows(M_USDT), 0);
         // HF = 3000×60% / 1300
         uint256 expectHf = 1800e18 * WAD / 1300e18;
         assertApproxEqAbs(pool.getUserHealthFactor(alice), expectHf, 1e12);
@@ -249,8 +247,8 @@ contract MultiAssetTest is BaseSetupV2 {
         // 还清 USDC：DAI 债务不受影响，global tier 保留
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
-        assertEq(pool.marketBorrows(M_USDC), 0);
+        pool.repay(0, type(uint256).max);
+        assertEq(_marketBorrows(M_USDC), 0);
         assertEq(pool.userDebtToken(alice, M_DAI), 500e18);
         assertEq(uint256(pool.userGlobalTier(alice)), 1);
         vm.expectRevert(bytes("tier locked"));
@@ -284,17 +282,15 @@ contract MultiAssetTest is BaseSetupV2 {
         _supplyMarket(address(dai), M_DAI, bob, 200_000e18);
         _supplyCollateralAsset(address(wsteth), alice, 1 ether); // 3000
         _borrowMarket(M_DAI, alice, 2400e18, 5);
-        // 计提利息 + skim 制造 DAI 物理储备
+        // 计提利息（储备留在池内账面）
         vm.warp(block.timestamp + 365 days);
         pool.accrue();
-        if (pool.marketReserve(M_DAI) > 0) pool.skimReserve(M_DAI);
         _assertMarketConservationApprox(M_DAI, 1e15); // 大份额市场计息后存在 ≤shares/WAD 取整余数
-        uint256 usdcCashBefore = pool.marketCash(M_USDC);
+        uint256 usdcCashBefore = _marketCash(M_USDC);
 
         // wstETH 崩盘 → 清走全部抵押
         oracle.setPrice(address(wsteth), 1e8);
         _approveToken(address(dai), liquidator, type(uint256).max);
-        uint256 reserveAfterSkim = dai.balanceOf(address(reserveManager));
         vm.prank(liquidator);
         pool.liquidate(alice, M_DAI, address(wsteth), type(uint256).max, 0);
         uint256 wstethColl = pool.userCollateralOf(alice, C_WSTETH);
@@ -313,7 +309,7 @@ contract MultiAssetTest is BaseSetupV2 {
         assertEq(pool.userDebtToken(alice, M_DAI), 0);
         // DAI 市场守恒（容差）；USDC 市场现金未受影响
         _assertMarketConservationApprox(M_DAI, 1e15);
-        assertEq(pool.marketCash(M_USDC), usdcCashBefore);
+        assertEq(_marketCash(M_USDC), usdcCashBefore);
     }
 
     function test_BadDebtInOneMarketDoesNotAffectOthers() public {
@@ -323,7 +319,7 @@ contract MultiAssetTest is BaseSetupV2 {
         // alice USDC 债务健康（ETH 抵押），DAI 坏账隔离
         _supplyCollateral(alice, 2 ether); // 6000
         _borrowMarket(M_USDC, alice, 1000e6, 1);
-        uint256 usdcIndexBefore = pool.marketSupply(M_USDC);
+        uint256 usdcIndexBefore = _marketSupply(M_USDC);
         // 坏账 DAI：carol
         _supplyCollateralAsset(address(wsteth), carol, 0.1 ether);
         _borrowMarket(M_DAI, carol, 100e18, 1);
@@ -339,15 +335,49 @@ contract MultiAssetTest is BaseSetupV2 {
         if (pool.userDebtToken(carol, M_DAI) > 0) {
             pool.handleBadDebt(carol, M_DAI);
         }
-        assertGt(pool.marketSupply(M_USDC), 0);
+        assertGt(_marketSupply(M_USDC), 0);
         assertGt(pool.userDebtToken(alice, M_USDC), 0);
-        assertApproxEqAbs(pool.marketBorrows(M_USDC), 1000e6, 1e6); // 含计息
+        assertApproxEqAbs(_marketBorrows(M_USDC), 1000e6, 1e6); // 含计息
         _assertMarketConservation(M_USDC);
         _assertMarketConservationApprox(M_DAI, 1e15);
         _assertMarketConservation(M_USDT);
     }
 
     // ==================== 双市场利率独立累计 ====================
+
+    function test_BadDebtOneMarketKeepsGlobalTierForOtherDebt() public {
+        // bob 提供两个市场现金；carol 以 wstETH 同 tier 借 USDC + DAI
+        _supply(bob, 500_000e6);
+        _supplyMarket(address(dai), M_DAI, bob, 500_000e18);
+        _supplyCollateralAsset(address(wsteth), carol, 1 ether); // 3000
+        _borrowMarket(M_USDC, carol, 400e6, 3); // 总债务 1600 ≤ 2100
+        _borrowMarket(M_DAI, carol, 1200e18, 3);
+        assertEq(uint256(pool.userGlobalTier(carol)), 3);
+        // wstETH 崩盘 → 一轮清算清走全部抵押
+        oracle.setPrice(address(wsteth), 1e8);
+        _approveToken(address(dai), liquidator, type(uint256).max);
+        vm.prank(liquidator);
+        pool.liquidate(carol, M_DAI, address(wsteth), type(uint256).max, 0);
+        assertEq(pool.userCollateralOf(carol, C_WSTETH), 0);
+        assertGt(pool.userDebtToken(carol, M_DAI), 0); // DAI 留坏账
+        assertGt(pool.userDebtToken(carol, M_USDC), 0); // USDC 债务仍在
+        assertEq(uint256(pool.userGlobalTier(carol)), 3);
+        assertTrue(pool.isLiquidatable(carol));
+
+        // 只处理 DAI 坏账 → 全局 tier 必须保留（USDC 债务仍存在）
+        pool.handleBadDebt(carol, M_DAI);
+        assertEq(pool.userDebtToken(carol, M_DAI), 0);
+        assertEq(uint256(pool.userGlobalTier(carol)), 3, "global tier must survive other-market debt");
+        assertGt(pool.userDebtToken(carol, M_USDC), 0);
+        assertTrue(pool.isLiquidatable(carol));
+
+        // USDC 市场坏账处理后才清零
+        pool.handleBadDebt(carol, M_USDC);
+        assertEq(pool.userDebtToken(carol, M_USDC), 0);
+        assertEq(uint256(pool.userGlobalTier(carol)), 0);
+        _assertMarketConservationApprox(M_DAI, 1e15);
+        _assertMarketConservation(M_USDC);
+    }
 
     function test_IndependentAccrualPerMarket() public {
         _supply(bob, 100_000e6);
@@ -365,5 +395,40 @@ contract MultiAssetTest is BaseSetupV2 {
         assertGt(daiBorrowApr, usdcBorrowApr);
         _assertMarketConservation(M_USDC);
         _assertMarketConservation(M_DAI);
+    }
+
+    function test_CollectTreasuryPerMarket() public {
+        // USDT + DAI 两个市场各自产生 Treasury
+        _supplyMarket(address(usdt), M_USDT, bob, 200_000e6);
+        _supplyMarket(address(dai), M_DAI, bob, 200_000e18);
+        _supplyCollateral(alice, 10 ether); // 30_000
+        _borrowMarket(M_USDT, alice, 3000e6, 5);
+        _borrowMarket(M_DAI, alice, 3000e18, 5);
+        vm.warp(block.timestamp + 365 days);
+        pool.accrue();
+        (,,,, uint256 tUsdt,) = pool.marketAccounts(M_USDT);
+        (,,,, uint256 tDai,) = pool.marketAccounts(M_DAI);
+        assertGt(tUsdt, 0);
+        assertGt(tDai, 0);
+
+        address treasuryAddr = makeAddr("treasury");
+        vm.prank(admin);
+        pool.setTreasuryAddress(treasuryAddr);
+        uint256 usdtBefore = usdt.balanceOf(treasuryAddr);
+        uint256 daiBefore = dai.balanceOf(treasuryAddr);
+
+        vm.prank(alice);
+        pool.collectTreasury(M_USDT);
+        vm.prank(alice);
+        pool.collectTreasury(M_DAI);
+
+        (,,,, uint256 tUsdtAfter,) = pool.marketAccounts(M_USDT);
+        (,,,, uint256 tDaiAfter,) = pool.marketAccounts(M_DAI);
+        assertEq(tUsdtAfter, 0);
+        assertEq(tDaiAfter, 0);
+        assertEq(usdt.balanceOf(treasuryAddr) - usdtBefore, tUsdt);
+        assertEq(dai.balanceOf(treasuryAddr) - daiBefore, tDai);
+        _assertMarketConservationApprox(M_USDT, 1e6);
+        _assertMarketConservationApprox(M_DAI, 1e15);
     }
 }

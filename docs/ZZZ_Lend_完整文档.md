@@ -360,7 +360,7 @@ forge fmt --check: 通过
 - Oracle：stale 仍 revert、偏差事件化、fallback 时限、pause；管理员无法注入任意价格。
 - 管理员无法挪用用户资金（测试断言）。
 - 关键状态变更均有事件（Borrowed/Repaid/Liquidated 含 LTV·HF·剩余债务·postHF；InterestAccrued；BadDebtRealized；OracleSwitched；PriceAnomalyDetected）。
-  - ⚠️ **V2（2026-09-02）精简**：为满足 EIP-170 尺寸，已移除 V1/V2 **用户操作事件**（Supplied/Withdrawn/Borrowed/Repaid/Liquidated/Collateral*、MarketAdded/CollateralAdded 等）与参数化 `skimReserve(uint8)/collectTreasury(uint8)`；保留核心会计事件（`InterestAccrued`/`BadDebtRealized`/`ReserveOverflowTransferred`）与 oracle 事件。链上核对以视图为主（`marketAccounts`/`userDebtToken`/`userCollateralOf`/`getUserPositionV2`）；USDT/DAI 市场 reserve/Treasury 独立记账但无便捷提取（仅默认 USDC 市场保留 `skimReserve()/collectTreasury()`），见第 9 章。
+  - ⚠️ **V2（2026-09-02）精简**：为满足 EIP-170 尺寸，已移除 V1/V2 **用户操作事件**（Supplied/Withdrawn/Borrowed/Repaid/Liquidated/Collateral*、MarketAdded/CollateralAdded 等）；参数化 `skimReserve(uint8)` 移除、`collectTreasury(uint8)` 已于 2026-09-02 恢复（按市场提取）；保留核心会计事件（`InterestAccrued`/`BadDebtRealized`/`ReserveOverflowTransferred`）与 oracle 事件。链上核对以视图为主（`marketAccounts`/`userDebtToken`/`userCollateralOf`/`getUserPositionV2`）；USDT/DAI 市场 reserve/Treasury 独立记账但无便捷提取（仅默认 USDC 市场保留 `skimReserve()/collectTreasury()`），见第 9 章。
 - **坏账即时传导给存款人**：坏账超出风险储备（第一损失缓冲）的部分会即时降低 `supplyIndex`，所有存款人按份额承担，**存款本金可能受损**。
 - **储备溢出自动转 Treasury**：储备总资产超过 `totalBorrows × 3%` 的部分自动转入 Treasury（`ReserveOverflowTransferred`），储备不会无限膨胀；溢出只从账面 `totalReserve` 划转（物理储备仅由坏账消耗），`totalBorrows = 0` 时不触发溢出。
 - 所有收益均为预估，随市场利率和资金利用率实时变化，协议不承诺固定收益。
@@ -480,6 +480,8 @@ cast send $POOL "liquidate(address,uint8,address,uint256,uint256)" $USER_B 0 $ET
 cast call $POOL "marketAccounts(uint8)(uint256,uint256,uint256,uint256,uint256,uint256)" 0 --rpc-url ...
 cast call $POOL "userDebtToken(address,uint8)(uint256)" $USER_B 1 --rpc-url ...
 cast call $POOL "getUserPositionV2(address)(uint256,uint256,uint256,bool)" $USER_B --rpc-url ...
+# 按市场提取 Treasury（USDT/DAI 收入；任何人均可调）
+cast send $POOL "collectTreasury(uint8)" 1 --rpc-url ... --private-key ...
 # 演示价格（USDC feed 常 stale）：SwitchableOracle 可设价模式
 cast send $SWITCH "enableSettable()" --private-key $PAUSER_KEY
 cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $DEPLOYER_KEY   # ETH 3000 USD（8位）
@@ -563,7 +565,7 @@ cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $D
 | 坏账 | `handleBadDebt(target)` | `handleBadDebt(target,marketId)` |
 | 视图 | market0 聚合（`cash/getTotalSupply/.../getUserPosition` 等，语义见 §9.6） | `marketAccounts(m)(cash,borrows,supply,reserve,treasury,supplyIndex)`、`marketUtilization/SupplyAPR/BorrowAPR(m,...)`、`userSharesOf/userCollateralOf/userDebtToken`、`getUserPositionV2(user)`、`userGlobalTier(user)` |
 
-> ⚠️ 为满足 EIP-170（24576B），LendingPool 已精简：**移除 V1/V2 用户操作事件**与参数化 `skimReserve(uint8)/collectTreasury(uint8)`（见 §5.1 注）；`RiskManager`/`ReserveManager` ABI 亦更新（token×tier 配置 / 按 token 覆盖）。
+> ⚠️ 为满足 EIP-170（24576B），LendingPool 已精简：**移除 V1/V2 用户操作事件**与参数化 `skimReserve(uint8)`（`collectTreasury(uint8)` 已于 2026-09-02 恢复，按市场提取，见 §5.1 注）；`RiskManager`/`ReserveManager` ABI 亦更新（token×tier 配置 / 按 token 覆盖）。
 
 ## 9.3 设计决策与语义
 
@@ -595,7 +597,7 @@ cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $D
 ## 9.6 已知语义与待办
 
 - `getUserPosition(user)`（V1 七元组）的 `collateral` 仅统计 ETH（V1 语义）；wstETH/WBTC 只体现在 `getUserPositionV2` 聚合中；Stress 演示页按 ETH 单抵押语义展示。
-- USDT/DAI 市场 reserve/Treasury 独立记账，但便捷提取 `skimReserve()/collectTreasury()` 仅保留默认 USDC 市场版本；如需按市场归集，后续补通用方法。
+- USDT/DAI 市场 reserve/Treasury 独立记账，已提供按市场 `collectTreasury(uint8)`（USDT/DAI 等市场的收入可独立提取并转账给 `treasuryAddress`）；reserve 的 `skimReserve(uint8)` 仍仅默认 USDC 市场版本，如需按市场补 `skim` 可后续扩展（注意 EIP-170 预算）。
 - 坏账吸收顺序沿用 V1：物理储备(已 skim)→该市场存款人(supplyIndex)→账面储备→Treasury；未 skim 的市场坏账先落该市场存款人 index。
 - 用户操作事件已移除（日志监控靠视图）；如需完整事件需扩展合约（预计超 EIP-170，需拆模块）。
 - `RiskEngine.calculateRiskLevelAuto` 基于默认 USDC 市场读数（市场0）；多市场逐一评估为后续增强项。

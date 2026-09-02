@@ -149,56 +149,12 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
 
     // ==================== User actions (V1-compat: market 0 / ETH collateral) ====================
 
-    function supply(uint256 amount) external nonReentrant whenNotPaused {
-        uint256 shares = _supplyCore(0, amount);
-        emit Supplied(msg.sender, amount, shares);
-        emit MarketSupplied(0, msg.sender, amount, shares);
-    }
-
-    function withdraw(uint256 shares) external nonReentrant {
-        uint256 amount = _withdrawCore(0, shares);
-        emit Withdrawn(msg.sender, amount, shares);
-        emit MarketWithdrawn(0, msg.sender, amount, shares);
-    }
-
     function supplyCollateral() external payable nonReentrant whenNotPaused {
         uint256 amount = _supplyCollateralCore(0, msg.value);
-        emit CollateralSupplied(msg.sender, amount);
-        emit CollateralSuppliedAsset(0, msg.sender, amount);
-    }
-
-    function withdrawCollateral(uint256 amount) external nonReentrant {
-        _withdrawCollateralCore(0, amount);
-        emit CollateralWithdrawn(msg.sender, amount);
-        emit CollateralWithdrawnAsset(0, msg.sender, amount);
-    }
-
-    function borrow(uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
-        (uint256 newLtv, uint256 hf) = _borrowCore(0, amount, tier);
-        emit Borrowed(msg.sender, tier, amount, newLtv, hf);
-        emit MarketBorrowed(0, msg.sender, uint8(tier), amount);
-    }
-
-    function repay(uint256 amount) external nonReentrant {
-        (uint256 repayAmount, uint256 remainingDebt) = _repayCore(0, amount);
-        emit Repaid(msg.sender, repayAmount, remainingDebt);
-        emit MarketRepaid(0, msg.sender, repayAmount, remainingDebt);
-    }
-
-    function liquidate(address target, uint256 debtToCover, uint256 minSeizeAmount) external nonReentrant {
-        (uint256 covered, uint256 seized, uint256 postHf) = _liquidateCore(0, target, 0, debtToCover, minSeizeAmount);
-        emit Liquidated(msg.sender, target, covered, seized, postHf);
-        emit MarketLiquidated(0, msg.sender, target, 0, covered, seized, postHf);
-    }
-
-    function handleBadDebt(address target) external nonReentrant {
-        _handleBadDebtCore(0, target);
     }
 
     function skimReserve() external nonReentrant {
         uint256 amount = _skimReserveCore(0);
-        emit ReserveSkimmed(amount);
-        emit MarketReserveSkimmed(0, amount);
     }
 
     function accrue() external {
@@ -207,46 +163,40 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
 
     function collectTreasury() external nonReentrant {
         (uint256 amount,) = _collectTreasuryCore(0);
-        emit TreasuryCollected(amount, treasuryAddress);
-        emit MarketTreasuryCollected(0, amount, treasuryAddress);
+    }
+
+    /// @notice 按市场提取该市场累计 Treasury（USDT/DAI 等）。任何人可调用；treasuryAddress 为零时 revert。
+    function collectTreasury(uint8 marketId) external nonReentrant {
+        (uint256 amount,) = _collectTreasuryCore(marketId);
     }
 
     // ==================== User actions (V2: market / collateral aware) ====================
 
     function supply(uint8 marketId, uint256 amount) external nonReentrant whenNotPaused {
         uint256 shares = _supplyCore(marketId, amount);
-        emit MarketSupplied(marketId, msg.sender, amount, shares);
     }
 
     function withdraw(uint8 marketId, uint256 shares) external nonReentrant {
         uint256 amount = _withdrawCore(marketId, shares);
-        emit MarketWithdrawn(marketId, msg.sender, amount, shares);
     }
 
     function supplyCollateral(address token, uint256 amount) external nonReentrant whenNotPaused {
         uint8 collId = _requireCollateral(token);
         require(amount >= _minCollateral(collId), "value below min");
         _supplyCollateralCore(collId, amount);
-        emit CollateralSuppliedAsset(collId, msg.sender, amount);
-        emit CollateralSupplied(msg.sender, amount);
     }
 
     function withdrawCollateral(address token, uint256 amount) external nonReentrant {
         uint8 collId = _requireCollateral(token);
         _withdrawCollateralCore(collId, amount);
-        emit CollateralWithdrawnAsset(collId, msg.sender, amount);
-        emit CollateralWithdrawn(msg.sender, amount);
     }
 
     function borrow(uint8 marketId, uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
         (uint256 newLtv, uint256 hf) = _borrowCore(marketId, amount, tier);
-        emit Borrowed(msg.sender, tier, amount, newLtv, hf);
-        emit MarketBorrowed(marketId, msg.sender, uint8(tier), amount);
     }
 
     function repay(uint8 marketId, uint256 amount) external nonReentrant {
         (uint256 repayAmount, uint256 remainingDebt) = _repayCore(marketId, amount);
-        emit MarketRepaid(marketId, msg.sender, repayAmount, remainingDebt);
     }
 
     /// @param collToken 清算人要收取的抵押品 token（ETH 哨兵或已注册 ERC20）。
@@ -257,21 +207,10 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         uint8 collId = _requireCollateral(collToken);
         (uint256 covered, uint256 seized, uint256 postHf) =
             _liquidateCore(marketId, target, collId, debtToCover, minSeizeAmount);
-        emit MarketLiquidated(marketId, msg.sender, target, collId, covered, seized, postHf);
     }
 
     function handleBadDebt(address target, uint8 marketId) external nonReentrant {
         _handleBadDebtCore(marketId, target);
-    }
-
-    function skimReserve(uint8 marketId) external nonReentrant {
-        uint256 amount = _skimReserveCore(marketId);
-        emit MarketReserveSkimmed(marketId, amount);
-    }
-
-    function collectTreasury(uint8 marketId) external nonReentrant {
-        (uint256 amount,) = _collectTreasuryCore(marketId);
-        emit MarketTreasuryCollected(marketId, amount, treasuryAddress);
     }
 
     // ==================== Admin ====================
@@ -345,10 +284,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     }
 
     // ==================== Views (market 0 / V1-compat) ====================
-
-    function usdc() external view returns (IERC20) {
-        return _markets[0].asset;
-    }
 
     function getTotalBorrows() public view returns (uint256) {
         return _totalBorrowsToken(0);
@@ -451,40 +386,19 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
 
     // ==================== Views (V2) ====================
 
-    function marketCount() external view returns (uint256) {
-        return _markets.length;
-    }
-
-    function collateralCount() external view returns (uint256) {
-        return _collaterals.length;
-    }
-
-    function marketAsset(uint8 marketId) external view returns (IERC20) {
-        return _market(marketId).asset;
-    }
-
-    function marketCash(uint8 marketId) external view returns (uint256) {
-        return _market(marketId).cash;
-    }
-
-    function marketDecimals(uint8 marketId) external view returns (uint8) {
-        return _market(marketId).decimals;
-    }
-
-    function marketReserve(uint8 marketId) external view returns (uint256) {
-        return _market(marketId).totalReserve;
-    }
-
-    function marketTreasury(uint8 marketId) external view returns (uint256) {
-        return _market(marketId).treasuryAccrued;
-    }
-
-    function marketSupply(uint8 marketId) external view returns (uint256) {
-        return _totalSupplyToken(marketId);
-    }
-
-    function marketBorrows(uint8 marketId) external view returns (uint256) {
-        return _totalBorrowsToken(marketId);
+    /// @notice 返回某市场快照（cash/borrows/supply/reserve/treasury/supplyIndex）。
+    function marketAccounts(uint8 marketId)
+        external
+        view
+        returns (uint256 cash, uint256 borrows, uint256 supply, uint256 reserve, uint256 treasury, uint256 supplyIdx)
+    {
+        Market storage m = _market(marketId);
+        cash = m.cash;
+        borrows = _totalBorrowsToken(marketId);
+        supply = _totalSupplyToken(marketId);
+        reserve = m.totalReserve;
+        treasury = m.treasuryAccrued;
+        supplyIdx = m.supplyIndex;
     }
 
     function marketUtilization(uint8 marketId) external view returns (uint256) {
@@ -511,14 +425,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         uint8 t = userTier[user][marketId];
         if (t == 0) return 0;
         return (userBorrowNorm[user][marketId] * _market(marketId).borrowIndexByTier[t] + WAD - 1) / WAD;
-    }
-
-    function userDebtValueWad(address user) external view returns (uint256) {
-        return _debtValueWad(user);
-    }
-
-    function collateralToken(uint256 collId) external view returns (address) {
-        return _collaterals[collId].token;
     }
 
     function getUserPositionV2(address user)
@@ -554,7 +460,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             m.borrowIndexByTier[t] = WAD;
         }
         _marketIndex[token] = _markets.length;
-        emit MarketAdded(uint8(_markets.length - 1), token, decimals);
     }
 
     function _addCollateralInternal(address token, uint8 decimals) internal {
@@ -567,7 +472,6 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         c.enabled = 1;
         c.wadScale = _pow10(18 - uint256(decimals));
         _collateralIndex[token] = _collaterals.length;
-        emit CollateralAdded(uint8(_collaterals.length - 1), token, decimals);
     }
 
     function _supplyCore(uint8 marketId, uint256 amount) internal returns (uint256 shares) {
@@ -782,7 +686,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         m.totalNormalizedByTier[t] -= userBorrowNorm[target][marketId];
         userBorrowNorm[target][marketId] = 0;
         userTier[target][marketId] = 0;
-        userGlobalTier[target] = 0;
+        if (!_anyBorrow(target)) userGlobalTier[target] = 0; // 其它市场仍有债务则保留全局 tier
 
         if (coveredByReserve > 0) {
             m.cash += coveredByReserve;
