@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, type MarketInfo } from "@/lib/config";
+import { ADDRESSES, MAX_UINT, type MarketInfo } from "@/lib/config";
 import { useUserPositionV2, useTokenAllowance } from "@/lib/hooks";
 import { formatToken, numToRaw, rawToNum, formatHealthFactor } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
@@ -72,7 +72,7 @@ export function RepayTab({ market }: { market: MarketInfo }) {
               address: market.address as Address,
               abi: MockTokenAbi,
               functionName: "approve",
-              args: [ADDRESSES.lendingPool as Address, raw],
+              args: [ADDRESSES.lendingPool as Address, MAX_UINT],
             })
           }
         >

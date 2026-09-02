@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, MIN_SUPPLY, type MarketInfo } from "@/lib/config";
+import { ADDRESSES, MIN_SUPPLY, MAX_UINT, type MarketInfo } from "@/lib/config";
 import { useMarketStats, useUserSharesOf, useTokenBalance, useTokenAllowance } from "@/lib/hooks";
 import { formatToken, numToRaw } from "@/lib/format";
 import { SupplyApyDisplay } from "@/components/ApyDisplay";
@@ -88,7 +88,7 @@ export function SupplyTab({ market }: { market: MarketInfo }) {
               address: market.address as Address,
               abi: MockTokenAbi,
               functionName: "approve",
-              args: [ADDRESSES.lendingPool as Address, raw],
+              args: [ADDRESSES.lendingPool as Address, MAX_UINT],
             })
           }
         >

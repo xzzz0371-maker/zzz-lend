@@ -4,6 +4,8 @@ const deployments = deploymentsRaw as any;
 
 export const CHAIN_ID = 11155111;
 export const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+export const MAX_UINT =
+  115792089237316195423570985008687907853269984665640564039457584007913129639935n;
 
 export const ADDRESSES = {
   lendingPool: deployments.lendingPool,

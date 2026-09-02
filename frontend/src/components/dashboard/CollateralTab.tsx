@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useBalance, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, COLLATERALS, MIN_COLLATERAL_TOKENS, ETH, type CollateralInfo } from "@/lib/config";
+import { ADDRESSES, COLLATERALS, MIN_COLLATERAL_TOKENS, MAX_UINT, ETH, type CollateralInfo } from "@/lib/config";
 import { useUserPositionV2, useTokenBalance, useTokenAllowance } from "@/lib/hooks";
 import { formatToken, formatUsd, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
@@ -81,7 +81,7 @@ function CollateralRow({
                 address: coll.address as Address,
                 abi: MockTokenAbi,
                 functionName: "approve",
-                args: [ADDRESSES.lendingPool as Address, raw],
+                args: [ADDRESSES.lendingPool as Address, MAX_UINT],
               })
             }
           >
