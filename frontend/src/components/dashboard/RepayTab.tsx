@@ -3,42 +3,35 @@
 import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
-import { LendingPoolAbi, MockUSDCAbi } from "@/lib/abis";
-import { ADDRESSES } from "@/lib/config";
-import { useUserPosition, useUsdcAllowance } from "@/lib/hooks";
-import { formatUsdc, formatHealthFactor, hfTone } from "@/lib/format";
+import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
+import { ADDRESSES, type MarketInfo } from "@/lib/config";
+import { useUserPositionV2, useTokenAllowance } from "@/lib/hooks";
+import { formatToken, numToRaw, rawToNum, formatHealthFactor } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
-export function RepayTab() {
+export function RepayTab({ market }: { market: MarketInfo }) {
   const { address } = useAccount();
   const [amount, setAmount] = useState("");
-  const { position } = useUserPosition(address as Address);
-  const { allowance, refetch: refetchAllowance } = useUsdcAllowance(
+  const { position } = useUserPositionV2(address as Address);
+  const { allowance, refetch: refetchAllowance } = useTokenAllowance(
+    market.address as Address,
     address as Address,
     ADDRESSES.lendingPool as Address,
   );
 
   const { data: hash, isPending, writeContract } = useWriteContract();
 
-  const debtRaw = position ? position.debt / BigInt(1e12) : 0n; // USDC6
+  const debtRaw = position ? position.marketDebt[market.id] ?? 0n : 0n;
   const amountNum = parseFloat(amount);
-  const raw = amountNum > 0 ? BigInt(Math.floor(amountNum * 1e6)) : 0n;
+  const raw = numToRaw(amountNum, market.decimals);
   const needApproval = raw > 0n && allowance < raw;
   const valid = raw > 0n && raw <= debtRaw;
-
   const remaining = debtRaw > raw ? debtRaw - raw : 0n;
-  // Approximate HF improvement: same formula as contract.
-  const remainingWad = remaining * BigInt(1e12);
-  const projHf =
-    position && position.collateralValue > 0n && remainingWad > 0n
-      ? (Number(position.collateralValue) * 0.78) / (Number(remainingWad) / 1e18)
-      : 0;
-  const projHfBig = projHf > 0 ? BigInt(Math.floor(projHf * 1e18)) : 0n;
 
   return (
     <div className="space-y-4">
       <div>
-        <label className="label">Repay amount (USDC)</label>
+        <label className="label">Repay amount ({market.symbol})</label>
         <div className="flex gap-2">
           <input
             type="number"
@@ -49,21 +42,25 @@ export function RepayTab() {
           />
           <button
             className="btn-outline whitespace-nowrap"
-            onClick={() => setAmount((Number(debtRaw) / 1e6).toString())}
+            onClick={() => setAmount(rawToNum(debtRaw, market.decimals).toString())}
           >
             Max
           </button>
         </div>
-        <p className="mt-1 text-xs text-slate-500">Current debt: {formatUsdc(debtRaw)} USDC</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Current debt: {formatToken(debtRaw, market.decimals)} {market.symbol}
+        </p>
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Remaining debt after</span>
-        <span className="text-slate-800">{formatUsdc(remaining)} USDC</span>
+        <span className="text-slate-800">
+          {formatToken(remaining, market.decimals)} {market.symbol}
+        </span>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-500">Health Factor after</span>
-        <span className={hfTone(projHfBig) === "danger" ? "text-danger" : "text-slate-800"}>
-          {formatHealthFactor(projHfBig)}
+        <span className="text-slate-500">Health Factor</span>
+        <span className="text-slate-800">
+          {position && position.healthFactor > 0n ? formatHealthFactor(position.healthFactor) : "--"}
         </span>
       </div>
       {needApproval ? (
@@ -72,14 +69,14 @@ export function RepayTab() {
           disabled={!address || !valid || isPending}
           onClick={() =>
             writeContract({
-              address: ADDRESSES.usdc as Address,
-              abi: MockUSDCAbi,
+              address: market.address as Address,
+              abi: MockTokenAbi,
               functionName: "approve",
               args: [ADDRESSES.lendingPool as Address, raw],
             })
           }
         >
-          {isPending ? "Approving…" : "Approve USDC"}
+          {isPending ? "Approving…" : `Approve ${market.symbol}`}
         </button>
       ) : (
         <button
@@ -90,7 +87,7 @@ export function RepayTab() {
               address: ADDRESSES.lendingPool as Address,
               abi: LendingPoolAbi,
               functionName: "repay",
-              args: [raw],
+              args: [BigInt(market.id), raw],
             })
           }
         >
@@ -100,13 +97,15 @@ export function RepayTab() {
       <TxStatus hash={hash} />
       <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-500">Current debt</span>
-          <span className="text-slate-800">{formatUsdc(debtRaw)} USDC</span>
-        </div>
-        <div className="flex justify-between">
           <span className="text-slate-500">Accrued interest included</span>
           <span className="text-slate-800">Yes (in debt)</span>
         </div>
+        <button
+          className="mt-1 text-xs text-accent hover:underline"
+          onClick={() => refetchAllowance()}
+        >
+          Refresh allowance
+        </button>
       </div>
     </div>
   );

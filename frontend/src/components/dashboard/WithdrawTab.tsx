@@ -4,38 +4,37 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
-import { ADDRESSES } from "@/lib/config";
-import { usePoolStats, useUserPosition } from "@/lib/hooks";
-import { formatUsdc } from "@/lib/format";
+import { ADDRESSES, type MarketInfo } from "@/lib/config";
+import { useMarketStats, useUserSharesOf } from "@/lib/hooks";
+import { formatToken, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
-export function WithdrawTab() {
+export function WithdrawTab({ market }: { market: MarketInfo }) {
   const { address } = useAccount();
   const [amount, setAmount] = useState("");
-  const { stats } = usePoolStats();
-  const { position } = useUserPosition(address as Address);
+  const { stats } = useMarketStats(market.id);
+  const shares = useUserSharesOf(address as Address, market.id);
 
   const { data: hash, isPending, writeContract } = useWriteContract();
 
   const amountNum = parseFloat(amount);
-  const rawUsdc = amountNum > 0 ? BigInt(Math.floor(amountNum * 1e6)) : 0n;
-  // shares = usdc6 * WAD / supplyIndex
-  const shares =
-    rawUsdc > 0n && stats && stats.supplyIndex > 0n
-      ? (rawUsdc * BigInt(1e18)) / stats.supplyIndex
-      : 0n;
+  const raw = numToRaw(amountNum, market.decimals);
+  // shares = rawToken * WAD / supplyIndex
+  const sharesNeeded =
+    raw > 0n && stats && stats.supplyIndex > 0n ? (raw * BigInt(1e18)) / stats.supplyIndex : 0n;
 
-  const withdrawable = position && stats ? (position.shares * stats.supplyIndex) / BigInt(1e18) : 0n;
+  const withdrawable =
+    stats && stats.supplyIndex > 0n ? (shares * stats.supplyIndex) / BigInt(1e18) : 0n;
   const valid =
-    !!position && rawUsdc > 0n && shares > 0n && shares <= position.shares && withdrawable >= rawUsdc;
-  const liquidityOk = !!stats && rawUsdc <= stats.cash;
+    !!stats && raw > 0n && sharesNeeded > 0n && sharesNeeded <= shares && withdrawable >= raw;
+  const liquidityOk = !!stats && raw <= stats.cash;
 
-  const remaining = position && rawUsdc > 0n ? (withdrawable > rawUsdc ? withdrawable - rawUsdc : 0n) : withdrawable;
+  const remaining = raw > 0n ? (withdrawable > raw ? withdrawable - raw : 0n) : withdrawable;
 
   return (
     <div className="space-y-4">
       <div>
-        <label className="label">Amount (USDC)</label>
+        <label className="label">Amount ({market.symbol})</label>
         <div className="flex gap-2">
           <input
             type="number"
@@ -46,23 +45,25 @@ export function WithdrawTab() {
           />
           <button
             className="btn-outline whitespace-nowrap"
-            onClick={() => setAmount((Number(withdrawable) / 1e6).toString())}
+            onClick={() => setAmount(rawToNum(withdrawable, market.decimals).toString())}
           >
             Max
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Withdrawable: {formatUsdc(withdrawable)} USDC
+          Withdrawable: {formatToken(withdrawable, market.decimals)} {market.symbol}
         </p>
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Remaining deposit after</span>
-        <span className="text-slate-800">{formatUsdc(remaining)} USDC</span>
+        <span className="text-slate-800">
+          {formatToken(remaining, market.decimals)} {market.symbol}
+        </span>
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Available liquidity</span>
         <span className={liquidityOk ? "text-success" : "text-danger"}>
-          {formatUsdc(stats?.cash)} USDC
+          {formatToken(stats?.cash, market.decimals)} {market.symbol}
         </span>
       </div>
       {!liquidityOk && valid && (
@@ -78,7 +79,7 @@ export function WithdrawTab() {
             address: ADDRESSES.lendingPool as Address,
             abi: LendingPoolAbi,
             functionName: "withdraw",
-            args: [shares],
+            args: [BigInt(market.id), sharesNeeded],
           })
         }
       >
@@ -88,7 +89,7 @@ export function WithdrawTab() {
       <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
           <span className="text-slate-500">Your supply shares</span>
-          <span className="text-slate-800">{position ? formatUsdc(position.shares) : "--"}</span>
+          <span className="text-slate-800">{formatToken(shares, market.decimals)}</span>
         </div>
       </div>
     </div>

@@ -1,8 +1,9 @@
 # ZZZ Lend — 完整项目文档
 
 > **单一总文档**：汇总产品、架构、合约、阶段进度、测试、安全、部署与待办（原分阶段/交接/配置文档已并入后删除）。
-> 归总日期：2026-08-29
-> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7 已部署 Sepolia（2026-08-31）+ 阶段 8 前端已实现（2026-09-01，见 `frontend/README.md`） ｜ 测试：22 suites / 163 passed（行覆盖：LendingPool 91.8% / LiquidationManager 100% / RiskManager 100%）
+> 归总日期：2026-08-29（**V2 多资产更新：2026-09-02**）
+> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：23 suites / 181 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
+> ⚠️ 本文档按 V1 单市场撰写；**多资产 V2 全部改动与新增资产表见第 9 章（2026-09-02）**，正文中冲突处以第 9 章为准。
 
 ---
 
@@ -16,8 +17,8 @@
 
 ## 1.2 核心产品理念
 
-- 存款人存入 **USDC** 获得动态预估 **Supply APY**（不构成固定收益承诺）；借款人抵押 **ETH** 借出 USDC。
-- **五档 LTV**：50% / 60% / 70% / 75% / 80%；**LTV 越高 → 利率越高 → 风险越高**。
+- 存款人存入 **USDC/USDT/DAI**（各自独立市场）获得动态预估 **Supply APY**（不构成固定收益承诺）；借款人抵押 **ETH / wstETH / WBTC**（跨资产共享、按资产分档）借出稳定币。
+- **五档 LTV**：50% / 60% / 70% / 75% / 80%（按抵押资产分别校准，WBTC 用保守表 45/55/65/70/75%）；**LTV 越高 → 利率越高 → 风险越高**。
 - 80% 是高风险档位，**不是固定收益承诺**。
 - 收益动态计算链路：
   - `Gross Yield = Borrow APR × Utilization`
@@ -41,6 +42,7 @@
 | 7.2 参数与边界 | maxDeviation 默认 30%；异常价禁止新增借款/抵押 | ✅ 已完成 |
 | 8 前端 | **Next.js 14 Dashboard 已实现**（Home/Dashboard/Stress Test/History/About，全英文，连接 Sepolia），见 `frontend/README.md` 与 `docs/前端_验证报告_v1.0.md` | ✅ 已完成 |
 | 3/5/9/10 | Sepolia E2E 真跑、回测、审计、主网 | ⏳ |
+| **9 多资产 V2** | 单池多市场（USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）、按资产五档 LTV/LT、跨市场同 tier 借款、任意抵押×市场清算、每市场独立利率/储备/坏账、前端多市场卡+选择器；部署 Sepolia（2026-09-02） | ✅ 已完成（详见第 9 章） |
 
 ## 1.4 产品设计详解
 
@@ -197,16 +199,16 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 
 | 合约 | 作用 | 是否持资金 |
 |---|---|---|
-| `LendingPool.sol` | 主合约：supply/withdraw、抵押/取回 ETH、borrow/repay、liquidate、handleBadDebt、skimReserve、accrue、collectTreasury、固定费率分配 + 储备溢出转Treasury、份额记账+分层指数计息、HF、暂停 | ✅ USDC+ETH |
-| `InterestRateModel.sol` | Utilization→Borrow APR（base+两段斜率+kink+每档溢价）；**三套市场预设** NORMAL/HIGH_VOL/EXTREME | ❌ |
-| `RiskManager.sol` | 五档 LTV(50/60/70/75/80%)、清算阈值(60/70/78/85/90%)、bonus 5%、close factor 50%、maxBorrowTier、validateBorrow、HF | ❌ |
-| `LiquidationManager.sol` | 清算没收量计算（bonus 封顶抵押总额） | ❌ |
-| `ReserveManager.sol` | 持有风险储备 USDC，仅可向池注资（坏账兜底），无任意取款 | ✅ 储备 |
-| `oracle/ChainlinkOracle.sol` | Chainlink 适配器：8 位小数、freshness/deviation/fallback/pause | ❌ |
-| `oracle/SwitchableOracle.sol` | 可切换预言机：主源=Chainlink；PAUSER 切到"管理员可设价"模式做清算测试，PAUSER 切回 | ❌ |
-| `risk/RiskEngine.sol` | 风险等级（LOW/MED/HIGH/EXTREME）+ 波动率采样 + 阈值（带上下限），**只输出建议** | ❌ |
-| `interfaces/IPriceOracle.sol` | 价格接口（无缝替换 Mock/Chainlink） | — |
-| `mocks/` | MockUSDC、MockPriceOracle、MockAggregatorV3（测试/演示用） | — |
+| `LendingPool.sol` | 主合约（**V2 多市场**）：市场注册（借贷资产）+ 抵押品注册；每市场 supply/withdraw、独立利用率/供应指数/储备/Treasury/坏账；borrow/repay/liquidate（任意市场债务 × 任意抵押品）；全局 tier（首笔借款锁定，跨市场同档）；多抵押加权 LTV/LT 健康度；HF/暂停 | ✅ USDC+USDT+DAI+ETH+wstETH+WBTC |
+| `InterestRateModel.sol` | Utilization→Borrow APR（base+两段斜率+kink+每档溢价）；**三套市场预设** NORMAL/HIGH_VOL/EXTREME（纯公式，市场无关，各市场用自身利用率调用） | ❌ |
+| `RiskManager.sol` | **V2 按抵押资产 × 档位** `tierConfig[token][tier]={maxLTV, liquidationThreshold}`；bonus 5%、close factor 50%、maxBorrowTier；ETH 哨兵档位构造预置 + 单 token 便捷读写（V1 兼容） | ❌ |
+| `LiquidationManager.sol` | 清算没收量计算（USD 值，bonus 封顶抵押总额；资产无关，可复用） | ❌ |
+| `ReserveManager.sol` | **V2 按 token 储备**：`defaultToken`（构造传入）+ `coverBadDebt(address token,uint256)` / `balanceOf(token)`；仅池可调；无任意取款 | ✅ 储备 |
+| `oracle/ChainlinkOracle.sol` | Chainlink 适配器：按资产 feed 注册（ETH/USDC 真 feed；其余资产 Sepolia 无官方 feed → 部署时挂 MockAggregator feed）；8 位小数、freshness/deviation/fallback/pause | ❌ |
+| `oracle/SwitchableOracle.sol` | 可切换预言机：主源=Chainlink；PAUSER 切到"管理员可设价"模式做清算/演示，按资产设价 | ❌ |
+| `risk/RiskEngine.sol` | 风险等级（LOW/MED/HIGH/EXTREME）+ 波动率采样（按资产）+ 阈值（带上下限），**只输出建议**（基于默认 USDC 市场读数） | ❌ |
+| `interfaces/IPriceOracle.sol` | 价格接口（按资产 `getAssetPrice(address)`，无缝替换 Mock/Chainlink） | — |
+| `mocks/` | MockUSDC(6) / **MockToken（通用精度）→ MockUSDT(6)/MockDAI(18)/MockWstETH(18)/MockWBTC(8)**、MockPriceOracle、MockAggregatorV3 | — |
 
 ## 3.2 关键参数默认值 — v1.0 · 2026-08-31（参数变更后更新本表日期）
 
@@ -242,15 +244,38 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 | LTV/LT 比值 | <0.6 | 0.6-0.8 | 0.8-1.0 | ≥1.0 |
 | 流动性 | ≥25% | ≥10% | ≥1% | <1% |
 
-**池参数**（v1.3 · 2026-09-01）：固定费率（存款人 94% / 储备 `reserveFactor=4%` / Treasury `treasuryFactor=2%`）、储备目标 `reserveTargetRatio=3%`（超出自动溢出转 Treasury）、清算 bonus=5%、close factor=50%、supplyIndex 起始 1e18、**最小金额限制（dust limit）**：`MIN_SUPPLY=10 USDC`、`MIN_BORROW=100 USDC`、`MIN_COLLATERAL=0.01 ETH`。
+**池参数**（v1.3 · 2026-09-01，V2 下市场 0=USDC 与全局费率沿用）：固定费率（存款人 94% / 储备 `reserveFactor=4%` / Treasury `treasuryFactor=2%`）、储备目标 `reserveTargetRatio=3%`（按**各市场各自借款总额**、超出自动溢出转该市场 Treasury）、清算 bonus=5%、close factor=50%、supplyIndex 起始 1e18、**最小金额（按精度缩放，整 token 计）**：`MIN_SUPPLY=10`、`MIN_BORROW=100`、`MIN_COLLATERAL=0.01`（如 USDC/USDT→`10e6/100e6`、DAI→`10e18/100e18`、WBTC 抵押→`0.01e8`）。
+
+### 3.2.1 多资产 V2 资产表（2026-09-02，详见第 9 章）
+
+**借贷市场（每资产独立市场：现金/供应指数/利用率/利率/储备/Treasury/坏账各自独立，共享 InterestRateModel 参数但用各自利用率独立运行）**
+
+| 市场 id | 资产 | 精度 | 最小存款 | 最小借款 | 价格源（部署） |
+|---|---|---|---|---|---|
+| 0（默认） | USDC | 6 | 10 USDC | 100 USDC | 真实 USDC/USD feed（常 stale，演示用可设价） |
+| 1 | USDT | 6 | 10 USDT | 100 USDT | MockAggregator feed（Sepolia 无官方） |
+| 2 | DAI | 18 | 10 DAI | 100 DAI | MockAggregator feed（Sepolia 无官方） |
+
+**抵押品（跨市场共享，按资产分档）**
+
+| coll id | 资产 | 精度 | 最小抵押 | 五档 LTV / 清算阈值 | 价格源（部署） |
+|---|---|---|---|---|---|
+| 0（默认） | ETH（原生） | 18 | 0.01 ETH | 50/60/70/75/80 ｜ 60/70/78/85/90 | 真实 ETH/USD feed |
+| 1 | wstETH | 18 | 0.01 wstETH | 同 ETH（1:1 锚定表） | MockAggregator feed |
+| 2 | WBTC | 8 | 0.01 WBTC | **45/55/65/70/75** ｜ 55/65/75/80/85（保守） | MockAggregator feed |
+
+> 注：Sepolia 无 USDT/DAI/WBTC/wstETH 官方 Chainlink feed → 部署脚本对这些资产注册 **MockAggregatorV3 feed**（固定价 1/1/100000/3000 USD），链上主源即可读价；真实链上 USDC/USD feed 常 stale，演示/测试统一用 `SwitchableOracle.enableSettable()` + 按资产 `setPrice(...)` 提供确定价格（见 6.5/9.4）。上线主网前须换真实 feed（wstETH 可用 wstETH/ETH × ETH/USD 合成）。
 
 ## 3.3 资金流与不变式 — v1.0 · 2026-08-31
 
 - 资金流：存款人 USDC → 池 → 借款人；借款人 ETH → 抵押（独立记账）；利息 → 存款人 94% + 风险储备 4% + Treasury 2%。
 - **核心不变式**：`cash + totalBorrows == getTotalSupply() + totalReserve + treasuryAccrued`（每笔操作后测试断言）。
+- **V2 按市场不变式**：`marketAccounts(m).cash + borrows == supply + reserve + treasury`（逐市场，MultiAsset 套件逐市场断言；大份额 18dp 市场计息后存在 ≤totalShares/WAD 的取整余数，用容差断言）。
 - 坏账（即时传导）：抵押归零仍有债 → `handleBadDebt`（任何人可调）先由风险储备（第一损失缓冲）覆盖可覆盖部分，未覆盖部分即时降低 `supplyIndex`，由所有存款人按份额承担损失；仓位一次性清零，**不挂账、无 `settleBadDebt`**。事件 `BadDebtRealized(user, badDebtAmount, coveredByReserve, lossToDepositors, oldSupplyIndex, newSupplyIndex)`。
 - 储备溢出：每次计息后，储备总资产（账面 + 物理）超过 `totalBorrows × 3%` 的部分溢出转 Treasury（事件 `ReserveOverflowTransferred`）；溢出只从**账面 `totalReserve`** 划转，物理储备仅由坏账消耗；`totalBorrows = 0` 时不触发溢出，储备保留。
 - 清算：HF<1 可清算，close factor 50%，清算人按 105% 估值没收 ETH；`liquidate(...,minSeizeAmount)` 支持最低没收量（0=不限）。
+- **V2 多市场清算**：`liquidate(target, marketId, collToken, debtToCover, minSeize)` 支持**任意市场债务 × 任意抵押品**；没收额按所选抵押品当前价格换算并以该抵押品余额封顶（同 V1 封顶抵押总额后再按币种换算，永不超收）。
+- **V2 tier 语义**：tier 为**全局仓位属性**——用户在任意市场首次借款即锁定 tier，之后所有市场借款必须同档（`userGlobalTier`）；健康度/可借能力按抵押品逐项 `value × LTV/LT(token, tier)` 加权求和。坏账在单市场清零债务时，若其它市场仍有债务则**保留**全局 tier（回归测试 `test_BadDebtOneMarketKeepsGlobalTierForOtherDebt` 覆盖）。
 
 ## 3.4 权限模型 — v1.0 · 2026-08-31
 
@@ -265,12 +290,14 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 
 # 第 4 部分 测试体系与结果
 
-## 4.1 测试总览 — 2026-08-31（每次跑完测试更新本表日期/用例数）
+## 4.1 测试总览 — 2026-09-02（每次跑完测试更新本表日期/用例数）
 
 ```
-forge test:  22 suites, 163 passed, 0 failed, 0 skipped
-forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性）
+forge test:  23 suites, 181 passed, 0 failed, 0 skipped
+forge fmt --check: 通过
 ```
+
+> V2 备注：`BaseSetup.t.sol` 为 V1 语义基座（市场 0/ETH），`BaseSetupV2.t.sol` 在其上注册 USDT/DAI 市场与 wstETH/WBTC 抵押、配置 oracle 价格与各资产档位，并提供市场级守恒辅助。LendingPool 为通过 EIP-170（24576B）已做精简（去掉 V1/V2 用户操作事件与部分视图合并），事件相关断言改为状态断言，见 `Events.t.sol`。
 
 | 测试文件 | 用例 | 覆盖 |
 |---|---|---|
@@ -296,6 +323,8 @@ forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性�
 | SecurityFixes.t.sol | 20 | 审计 v1.1 修复回归（F1 取整下溢 / F3 setPrice 校验 / F4 零地址 / F2 超额损失守恒 / F5 实时偏差 / F9 oracle 暂停清算）+ v1.2 最小金额限制（MIN_SUPPLY/MIN_BORROW/MIN_COLLATERAL） |
 | FeeMechanism.t.sol | 12 | 固定费率 94/4/2 合计100%；储备未达标无溢出/达标溢出转Treasury/恰达目标新增4%全溢出/坏账消耗储备后溢出停止/借款增减改变目标/totalBorrows=0 不溢出储备保留/collectTreasury 转账与零地址revert/溢出事件/参数边界 |
 | MinSeize.t.sol | 3 | minSeize 通过/不足 revert/0 不限制 |
+| **BaseSetupV2.t.sol** | 基座 | 注册 USDT/DAI 市场 + wstETH/WBTC 抵押；oracle 价格与各资产档位；市场守恒（精确/容差）辅助 |
+| **MultiAsset.t.sol** | 18 | **V2 多资产**：每资产（USDT/DAI/wstETH/WBTC）supply/borrow/repay/withdraw/liquidate；精度/最小金额（6/8/18 位）；跨抵押合计能力与加权健康度；跨市场同 tier 借款与市场隔离；任意抵押×市场清算；逐市场坏账隔离与全局 tier 保留（回归）；双市场利率独立累计 |
 
 ## 4.2 压力测试汇总（`contracts/test-out/stress_matrix.md` 自动生成）— 2026-08-31
 
@@ -331,6 +360,7 @@ forge fmt --check: 通过 ｜ npm run lint: 0 errors（369 warnings，风格性�
 - Oracle：stale 仍 revert、偏差事件化、fallback 时限、pause；管理员无法注入任意价格。
 - 管理员无法挪用用户资金（测试断言）。
 - 关键状态变更均有事件（Borrowed/Repaid/Liquidated 含 LTV·HF·剩余债务·postHF；InterestAccrued；BadDebtRealized；OracleSwitched；PriceAnomalyDetected）。
+  - ⚠️ **V2（2026-09-02）精简**：为满足 EIP-170 尺寸，已移除 V1/V2 **用户操作事件**（Supplied/Withdrawn/Borrowed/Repaid/Liquidated/Collateral*、MarketAdded/CollateralAdded 等）与参数化 `skimReserve(uint8)/collectTreasury(uint8)`；保留核心会计事件（`InterestAccrued`/`BadDebtRealized`/`ReserveOverflowTransferred`）与 oracle 事件。链上核对以视图为主（`marketAccounts`/`userDebtToken`/`userCollateralOf`/`getUserPositionV2`）；USDT/DAI 市场 reserve/Treasury 独立记账但无便捷提取（仅默认 USDC 市场保留 `skimReserve()/collectTreasury()`），见第 9 章。
 - **坏账即时传导给存款人**：坏账超出风险储备（第一损失缓冲）的部分会即时降低 `supplyIndex`，所有存款人按份额承担，**存款本金可能受损**。
 - **储备溢出自动转 Treasury**：储备总资产超过 `totalBorrows × 3%` 的部分自动转入 Treasury（`ReserveOverflowTransferred`），储备不会无限膨胀；溢出只从账面 `totalReserve` 划转（物理储备仅由坏账消耗），`totalBorrows = 0` 时不触发溢出。
 - 所有收益均为预估，随市场利率和资金利用率实时变化，协议不承诺固定收益。
@@ -409,22 +439,26 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 
 > **部署者始终是最终管理者**（DEFAULT_ADMIN 未移交 + 未撤销构造器角色）。测试网可接受；生产必须移交多签并撤销部署者角色。TESTNET_ADMIN 缺省=部署者。
 
-## 6.7 已部署地址回填表（Sepolia · 2026-09-01 重新部署 · v2.0）
+## 6.7 已部署地址回填表（Sepolia · 2026-09-02 多资产 V2 全新部署）
 
-| 合约 | 地址 | 验证状态 |
+| 合约/资产 | 地址 | 验证状态 |
 |---|---|---|
-| MockUSDC | `0x3e4f4513Ba65ec010A0eab1ABA168c80E62450E7` | ✅ 已部署 |
-| ChainlinkOracle | `0x422C471e12943162eED504be5e288A3D6B9a987b` | ✅ 已验证（ETH/USD 实时可读） |
-| SwitchableOracle | `0xB4F103d3E42D85fD3246017b9c092F836D83fe97` | ✅ 已验证（主源=Chainlink） |
-| MockPriceOracle | `0x9F6DB2e1D5028A5c1Bd8868C9BAEc60FAd2B2d2C` | ✅ 已部署 |
-| InterestRateModel | `0xb124B80801002891A72Ee9056093F8cEA9593Dc2` | ✅ 已验证（NORMAL 预设新参数） |
-| RiskManager | `0xA49CfEFCbc9766eccF81FF17d981AE9945C66Df9` | ✅ 已部署 |
-| LiquidationManager | `0x01f69710DAc358D0fece2e3CcA29Ae3900EdA700` | ✅ 已部署 |
-| ReserveManager | `0x1449AF616834692A93B3629883035942F5546D2F` | ✅ 已验证（lendingPool 接线正确） |
-| RiskEngine | `0x2C9E8778F60be3AF740633157ca4CF8670023fB9` | ✅ 已部署 |
-| LendingPool | `0xD33721afEfB924A390525213A590Eb8db56D13aA` | ✅ 已验证（新参数/角色/费率） |
+| MockUSDC | `0x68CdE0DaDb0E6903DcED4F544Cd665290Ed5ceEF` | ✅ 已部署 |
+| USDT（Mock，6dp） | `0x5d4f1887147bF27De679dbd93caf420b2973459D` | ✅ 已部署 |
+| DAI（Mock，18dp） | `0x49f9ADb3bBC8951D0B2Ef38cc0a7db68139f71ef` | ✅ 已部署 |
+| wstETH（Mock，18dp） | `0x36B2d15657bcc2D8309AD4DaAC1f36517e9C8522` | ✅ 已部署 |
+| WBTC（Mock，8dp） | `0xBEB1dA0E255f688b310100Ed1d5d9614a3e6DDd2` | ✅ 已部署 |
+| ChainlinkOracle | `0x8d8F23D3abC4FF69b07939dF6188C53C84B6Ced7` | ✅ 已部署（ETH/USDC 真 feed + 其余 Mock feed） |
+| SwitchableOracle | `0xe71B694b38a23c1f5a52035e4aD6e38eaf742F12` | ✅ 已部署（主源=Chainlink） |
+| MockPriceOracle | `0xa0e5237773391e00392307BfCC163be30e14Da69` | ✅ 已部署 |
+| InterestRateModel | `0x802DfD4ED09B086A57226543DDDde9e04c2C8ec8` | ✅ 已部署（NORMAL 预设） |
+| RiskManager | `0xe3D73D8214C392fAA497991B4728Fbfb7433286f` | ✅ 已部署（ETH/wstETH 同表 + WBTC 保守表） |
+| LiquidationManager | `0xF351531647451d612a7DAaa4A8FAD83A4BF19cF7` | ✅ 已部署 |
+| ReserveManager | `0x1FE9d734d5FC2d23260867Eb06F591f63D5999dA` | ✅ 已部署（defaultToken=USDC，可按 token 覆盖） |
+| RiskEngine | `0xAb105e632e4B336eA4E9259ef026a068831d9Cfc` | ✅ 已部署 |
+| LendingPool | `0x02f0d38Ee99c5Cd2d36EB4B8A419d343b95FEef6` | ✅ 已部署（**V2 多市场：USDC/USDT/DAI 市场 + ETH/wstETH/WBTC 抵押**） |
 
-> **部署记录（2026-09-01 重新部署）**：为让新参数链上生效（NORMAL base 0.5%/slope1 4%/slope2 50%、档位溢价 0/1/2/3/4.5%、分成 94/4/2），全部合约重新部署（地址见上表）。链上验证：`getBorrowAPR(1)` util=0 → **0.5%**、util=20% → **1.3%**；`reserveFactor=4%`、`treasuryFactor=2%`、`depositorShare=94%`；档位溢价 T2/T3/T4/T5 = 1%/2%/3%/4.5%。冒烟测试：supply 500 USDC + borrow 100 USDC（tier1）成功。池子从 0 开始（旧链上测试数据已清空）。部署者 `0xC35C...6830`。⚠️ **USDC/USD feed 仍可能 stale**，读价相关操作若 revert 需等 feed 更新或调 `maxStaleness`。首次部署记录（2026-08-31，旧地址）见 `docs/E2E_Sepolia_测试报告.md`。
+> **部署记录（2026-09-02 V2）**：为支持多资产，全部合约以 V2 源码重新部署（地址见上表；**此前的 2026-08-31/09-01 单市场地址已被本次取代**，旧前端/演示访问的池为旧代码，如需沿用请勿与新地址混用）。部署/初始化见 `script/Deploy.s.sol`：注册 USDT(6)/DAI(18) 市场与 wstETH(18)/WBTC(8) 抵押 → RiskManager 写入各资产档位（wstETH 同 ETH、WBTC 保守表）→ 为 USDT/DAI/wstETH/WBTC 注册 MockAggregator feed。演示统一经 SwitchableOracle 可设价模式提供确定价格（USDC/USD 真 feed 常 stale）。冒烟验证：USDC 市场 supply→ETH 抵押→borrow(tier3)→repay 全通；E2E 见 `script/e2e_sepolia_v2.sh`（逐资产 supply/borrow/repay/withdraw/liquidate）。部署者 `0xC35C...6830`。
 
 ## 6.8 cast 命令速查
 
@@ -435,11 +469,21 @@ forge script script/Deploy.s.sol:Deploy --rpc-url $SEPOLIA_RPC_URL --broadcast -
 MOCK_FEEDS=1 forge script script/Deploy.s.sol:Deploy --rpc-url http://127.0.0.1:8545 --broadcast
 # 验证合约
 forge script script/Verify.s.sol:Verify --rpc-url $SEPOLIA_RPC_URL
-# 手动操作
-cast send $POOL "supply(uint256)" 1000000000 --rpc-url $SEPOLIA_RPC_URL --private-key $USER_A_KEY
-cast call $POOL "getUserHealthFactor(address)(uint256)" $USER_B --rpc-url $SEPOLIA_RPC_URL
-# 测试币：ETH faucet（sepoliafaucet.com / faucets.chain.link）；MockUSDC 直接 faucet()
-cast send $USDC "faucet(uint256)" 1000000000000 --rpc-url $SEPOLIA_RPC_URL --private-key $USER_A_KEY
+# 手动操作（V2 均为市场/抵押显式入参）
+# supply/withdraw/borrow/repay 第一参 = 市场 id（0=USDC/1=USDT/2=DAI）
+cast send $POOL "supply(uint8,uint256)" 0 1000000000 --rpc-url $SEPOLIA_RPC_URL --private-key $USER_A_KEY
+cast send $POOL "supplyCollateral()" --value 5000000000000000000 --rpc-url $SEPOLIA_RPC_URL --private-key $USER_B_KEY   # ETH 抵押
+cast send $POOL "supplyCollateral(address,uint256)" $WSTETH 1000000000000000000 --rpc-url ... --private-key ...        # wstETH 抵押
+cast send $POOL "borrow(uint8,uint256,uint256)" 1 1000000000 3 --rpc-url ... --private-key ...                          # USDT 市场借
+cast send $POOL "liquidate(address,uint8,address,uint256,uint256)" $USER_B 0 $ETH 500000000 0 --rpc-url ... --private-key ...  # 清算（市场0/ETH）
+# 只读（多市场）
+cast call $POOL "marketAccounts(uint8)(uint256,uint256,uint256,uint256,uint256,uint256)" 0 --rpc-url ...
+cast call $POOL "userDebtToken(address,uint8)(uint256)" $USER_B 1 --rpc-url ...
+cast call $POOL "getUserPositionV2(address)(uint256,uint256,uint256,bool)" $USER_B --rpc-url ...
+# 演示价格（USDC feed 常 stale）：SwitchableOracle 可设价模式
+cast send $SWITCH "enableSettable()" --private-key $PAUSER_KEY
+cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $DEPLOYER_KEY   # ETH 3000 USD（8位）
+# 测试币：Mock 资产均支持 faucet()
 ```
 
 ## 6.9 常见错误排查
@@ -464,6 +508,7 @@ cast send $USDC "faucet(uint256)" 1000000000000 --rpc-url $SEPOLIA_RPC_URL --pri
 - ❌ 不得宣传"保本""本金安全""刚兑""固定收益"等表述（存款本金可能因坏账而受损）。
 - ✅ 全部测试网资产，可随时作废重建。
 - ✅ 清算演示后必须 `disableSettable()` 切回真实 Chainlink。
+  - ⚠️ **V2 演示例外（2026-09-02）**：Sepolia 的 USDC/USD 真 feed 常 stale，且 USDT/DAI/wstETH/WBTC 仅挂 Mock feed → 演示站点/冒烟测试**保持可设价模式**提供确定价格（测试网人为设定，非真实行情）；上线主网前必须换真实 feed 并关闭可设价模式。
 
 ---
 
@@ -495,4 +540,65 @@ cast send $USDC "faucet(uint256)" 1000000000000 --rpc-url $SEPOLIA_RPC_URL --pri
 
 ---
 
-*本文档为项目唯一总文档（原分阶段文档已并入后删除）。*
+# 第 9 部分 多资产 V2 附录（2026-09-02）
+
+> V2 = 单一 `LendingPool` 内部多市场（单池多市场），正文 V1 章节中与本附录冲突处以本附录为准。全部改动含合约源码、测试、部署与前端（commit 见 git log 2026-09-02）。
+
+## 9.1 架构与数据模型
+
+- **市场（借贷资产）**：`Market[] _markets`，每市场含 `asset / decimals / wadScale(=10^(18-d)) / cash / totalShares / supplyIndex / lastAccrual / totalReserve / treasuryAccrued / borrowIndexByTier[6] / totalNormalizedByTier[6]`。市场 0 在构造时注册（USDC），`addMarket(token,decimals)`（PARAM_ADMIN）追加。
+- **抵押品**：`Collateral[] _collaterals`（token/decimals/wadScale/enabled），构造注册 ETH 哨兵，`addCollateral(token,decimals)`（PARAM_ADMIN）追加。
+- **用户仓位**：按市场 `userShares[user][m]` / `userBorrowNorm[user][m]` / `userTier[user][m]`；抵押品 `userCollateral[user][collId]`；全局档位 `userGlobalTier[user]`。
+- **美元换算**：`amount→WAD = amount×price×wadScale/1e8`；`WAD→amount = wad×1e8/(price×wadScale)`（逐 token 精度，向下/向上取整方向对协议有利）。
+- **每市场独立利率/储备/坏账**：accrue 逐市场跑自身利用率；储备目标与溢出、Treasury 记账均按各自市场 token；坏账传导只影响该市场 `supplyIndex` 与该市场存款人。
+
+## 9.2 关键接口（V2 显式入参；市场 0 / ETH 的 V1 便捷形态）
+
+| 动作 | V1 便捷形态（保留） | V2 显式形态 |
+|---|---|---|
+| 存款/取款 | `supply(amount)`/`withdraw(shares)` | `supply(marketId,amount)`/`withdraw(marketId,shares)` |
+| 抵押 | `supplyCollateral() payable`（ETH）、`withdrawCollateral(amount)` | `supplyCollateral(token,amount)`/`withdrawCollateral(token,amount)` |
+| 借款/还款 | `borrow(amount,tier)`/`repay(amount)` | `borrow(marketId,amount,tier)`/`repay(marketId,amount)` |
+| 清算 | `liquidate(target,cover,minSeize)`（市场0+ETH） | `liquidate(target,marketId,collToken,cover,minSeize)` |
+| 坏账 | `handleBadDebt(target)` | `handleBadDebt(target,marketId)` |
+| 视图 | market0 聚合（`cash/getTotalSupply/.../getUserPosition` 等，语义见 §9.6） | `marketAccounts(m)(cash,borrows,supply,reserve,treasury,supplyIndex)`、`marketUtilization/SupplyAPR/BorrowAPR(m,...)`、`userSharesOf/userCollateralOf/userDebtToken`、`getUserPositionV2(user)`、`userGlobalTier(user)` |
+
+> ⚠️ 为满足 EIP-170（24576B），LendingPool 已精简：**移除 V1/V2 用户操作事件**与参数化 `skimReserve(uint8)/collectTreasury(uint8)`（见 §5.1 注）；`RiskManager`/`ReserveManager` ABI 亦更新（token×tier 配置 / 按 token 覆盖）。
+
+## 9.3 设计决策与语义
+
+1. **tier 全局锁**：跨市场借款必须同档（`userGlobalTier` 首笔锁定），与 V1 单市场语义一致；坏账清单市场债务时其它市场仍有债则保留全局 tier（有回归测试）。
+2. **健康度/能力为抵押品加权**：`capacity = Σ value_i×LTV(token_i,tier)`；`HF = Σ value_i×LT(token_i,tier) / debtWad`（多抵押自动按各资产档位）。
+3. **按抵押分档表**：ETH/wstETH 用 50/60/70/75/80（LT 60/70/78/85/90）；**WBTC 保守 45/55/65/70/75（LT 55/65/75/80/85）**；档位仍是借款端利率溢价与风险刻度，LTV/LT 由各抵押资产自己的表约束。
+4. **精度**：借贷 USDC/USDT(6)、DAI(18)；抵押 ETH/wstETH(18)、WBTC(8)。金额换算全部过 `wadScale`，不假设 6 位。
+5. **最小金额**：按整 token 缩放（10 存 / 100 借 / 0.01 抵押 × 10^decimals）；`DUST_THRESHOLD=100`（raw 单位）。
+6. **市场 0 保持默认**：构造注册 USDC 市场与 ETH 抵押，使存量 V1 交互/前端/测试（市场0）语义不变。
+7. **价格源**：Sepolia 仅 ETH/USD、USDC/USD 有真 feed（后者常 stale）；其余资产部署时挂 **MockAggregator feed**；主网须换真实 feed（wstETH 建议 wstETH/ETH×ETH/USD）。
+
+## 9.4 演示/测试网运维（cast）
+
+- 演示/冒烟价格设定（可设价模式，PAUSER 开、PARAM_ADMIN 设价）：
+  `enableSettable()` → `setPrice(ETH,3000e8)` `setPrice(wstETH,3000e8)` `setPrice(WBTC,100000e8)` `setPrice(USDC/USDT/DAI,1e8)`。价格 8 位小数。
+- 每资产 E2E 脚本：`bash script/e2e_sepolia_v2.sh`（supply/borrow/repay/withdraw/部分 liquidate），或 PowerShell 逐笔流程见会话记录。
+- 自清算被禁止：target 与 msg.sender 不能相同；需独立签名账户当清算人。
+- 只读核对：`marketAccounts`、`userDebtToken(user,m)`、`userCollateralOf(user,collId)`、`getUserPositionV2`、`isLiquidatable`。
+
+## 9.5 新增资产接入指南（Checklist）
+
+1. `MockToken`（或真实 token）+ decimals；若为借贷资产 → `pool.addMarket(token,decimals)`；若为抵押 → `pool.addCollateral(token,decimals)`（PARAM_ADMIN）。
+2. `RiskManager.setTier(token, tier, maxLTV, lt)` 逐个写入五档（无默认表的新 token 需显式配置，0 值会令其无借款能力）。
+3. 价格：ChainlinkOracle `setFeed(token, aggregator, decimals)`（Sepolia 用 MockAggregator 或走可设价模式）；主网用真实 feed。
+4. 前端：`frontend/src/lib/config.ts` 的 `BORROW_MARKETS`/`COLLATERALS`（含 decimals/address/symbol）+ 必要时 `COLLATERAL_TIER_LTV/LT`（BorrowTab 客户端能力预估用）；ABI 若变了需从 `contracts/out/*.json` 重新生成 `frontend/src/lib/abis/*.json`。
+5. 文档：更新 §3.2.1 资产表与本表；测试网重跑 per-asset E2E。
+6. 测试：仿 `MultiAsset.t.sol` 添加该资产 supply/borrow/repay/withdraw/liquidate + 精度/跨市场组合。
+
+## 9.6 已知语义与待办
+
+- `getUserPosition(user)`（V1 七元组）的 `collateral` 仅统计 ETH（V1 语义）；wstETH/WBTC 只体现在 `getUserPositionV2` 聚合中；Stress 演示页按 ETH 单抵押语义展示。
+- USDT/DAI 市场 reserve/Treasury 独立记账，但便捷提取 `skimReserve()/collectTreasury()` 仅保留默认 USDC 市场版本；如需按市场归集，后续补通用方法。
+- 坏账吸收顺序沿用 V1：物理储备(已 skim)→该市场存款人(supplyIndex)→账面储备→Treasury；未 skim 的市场坏账先落该市场存款人 index。
+- 用户操作事件已移除（日志监控靠视图）；如需完整事件需扩展合约（预计超 EIP-170，需拆模块）。
+- `RiskEngine.calculateRiskLevelAuto` 基于默认 USDC 市场读数（市场0）；多市场逐一评估为后续增强项。
+- 待办：主网真实 feed/权限收口/外部审计；每市场 reserve/treasury 提取通用化；前端 DOM 实测截图与链上 E2E 结果回填 §4/§6.7。
+
+*本文档为项目唯一总文档（原分阶段文档已并入后删除）。V2 多资产附录完（2026-09-02）。*

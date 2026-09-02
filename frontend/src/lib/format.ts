@@ -1,5 +1,27 @@
 // Number / address formatting helpers (USDC 6-dec, ETH 18-dec, WAD 1e18).
 
+const POW10 = (dec: number): bigint => 10n ** BigInt(dec);
+
+export function rawToNum(raw: bigint | undefined | null, decimals = 6): number {
+  if (raw === undefined || raw === null) return 0;
+  return Number(raw) / Number(POW10(decimals));
+}
+
+export function numToRaw(n: number, decimals = 6): bigint {
+  if (!isFinite(n) || n <= 0) return 0n;
+  return BigInt(Math.floor(n * Number(POW10(decimals))));
+}
+
+export function formatToken(raw: bigint | number | undefined | null, decimals = 6, dec = 2): string {
+  if (raw === undefined || raw === null) return "--";
+  return formatAmount(Number(raw) / Number(POW10(decimals)), dec);
+}
+
+export function formatUsd(n: number, dec = 2): string {
+  if (!isFinite(n)) return "--";
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
+}
+
 export function formatUsdc(raw: bigint | number | undefined | null, decimals = 2): string {
   if (raw === undefined || raw === null) return "--";
   const n = Number(raw) / 1e6;

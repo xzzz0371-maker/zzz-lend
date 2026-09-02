@@ -1,12 +1,73 @@
 "use client";
 
-import { usePoolStats, useBorrowAprs, usePrices } from "@/lib/hooks";
-import { StatCard } from "@/components/StatCard";
+import { usePoolStats, useBorrowAprs, usePrices, useMarketStats, useMarketBorrowAprs } from "@/lib/hooks";
 import { RiskCard } from "@/components/RiskCard";
 import { UtilizationRing } from "@/components/UtilizationRing";
 import { RateCurve } from "@/components/RateCurve";
-import { SupplyApyDisplay } from "@/components/ApyDisplay";
-import { TIERS } from "@/lib/config";
+import { TIERS, BORROW_MARKETS, type MarketInfo } from "@/lib/config";
+import { formatApy, formatToken } from "@/lib/format";
+import { projectedSupplyApyPct } from "@/lib/rates";
+
+function MarketCard({ market }: { market: MarketInfo }) {
+  const { stats } = useMarketStats(market.id);
+  const borrowAprs = useMarketBorrowAprs(market.id);
+  const supplyAprPct = stats ? (Number(stats.supplyApr) / 1e18) * 100 : 0;
+  const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;
+  const borrowAprTop = borrowAprs[5];
+  const isEmpty = utilPct <= 0.0001;
+  const displayedApy = isEmpty ? projectedSupplyApyPct() : supplyAprPct;
+
+  return (
+    <div className="card card-hover p-5">
+      <div className="flex items-center justify-between">
+        <div className="stat-title">{market.name}</div>
+        <span className="pill bg-blue-50 text-blue-600 ring-1 ring-blue-200">{market.symbol}</span>
+      </div>
+      <div className="mt-1 text-2xl font-bold text-slate-900">
+        {stats ? `$${formatToken(stats.supply, market.decimals, 0)}` : "--"}
+      </div>
+      <div className="text-xs text-slate-500">
+        {market.stable ? "TVL (stable ≈ $)" : "TVL"}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+        <div>
+          <div>Total Supply</div>
+          <div className="font-semibold text-slate-800">
+            {stats ? formatToken(stats.supply, market.decimals) : "--"} {market.symbol}
+          </div>
+        </div>
+        <div>
+          <div>Total Borrow</div>
+          <div className="font-semibold text-slate-800">
+            {stats ? formatToken(stats.borrows, market.decimals) : "--"} {market.symbol}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 flex justify-between text-sm">
+        <span className="text-slate-500">Utilization</span>
+        <span className="font-semibold text-slate-800">{utilPct.toFixed(2)}%</span>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200/60 pt-2">
+        <span className="text-xs text-slate-500">Supply APY</span>
+        <span className="font-semibold text-slate-800">{formatApy(displayedApy)}</span>
+      </div>
+      <div className="text-right text-[10px] text-slate-400">
+        {isEmpty ? "Projected (assumes 80% utilization)" : `Current · projected ~${projectedSupplyApyPct().toFixed(2)}%`}
+      </div>
+      <div className="mt-1 flex justify-between text-xs text-slate-500">
+        <span>Borrow APR · T5</span>
+        <span className="font-semibold text-slate-800">
+          {borrowAprTop !== undefined ? `~${borrowAprTop.toFixed(2)}%` : "--"}
+        </span>
+      </div>
+      {utilPct < 20 && (
+        <div className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-700 ring-1 ring-amber-200">
+          Idle funds — APY may stay low until utilization rises.
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { stats, isPending } = usePoolStats();
@@ -15,7 +76,6 @@ export default function HomePage() {
 
   const supplyAprPct = stats ? (Number(stats.supplyApr) / 1e18) * 100 : 0;
   const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;
-  // 7-day average supply APY — demo estimate around the current value.
   const supply7d = supplyAprPct * (0.96 + (supplyAprPct % 0.08) / 100);
 
   return (
@@ -30,9 +90,9 @@ export default function HomePage() {
             Lending where <span className="text-gradient">you choose your risk</span>
           </h1>
           <p className="max-w-xl text-slate-500">
-            Supply USDC to earn dynamic estimated yield, or borrow against ETH across five risk
-            tiers. Real-time risk pricing, transparent reserves, and losses shared by depositors on
-            bad debt — like a fund whose NAV can decline.
+            Deposit USDC, USDT or DAI to earn, or borrow against ETH, wstETH and WBTC across five
+            risk tiers. Real-time risk pricing, transparent reserves, and losses shared by
+            depositors on bad debt — like a fund whose NAV can decline.
           </p>
           <div className="flex flex-wrap gap-3">
             <a href="/dashboard" className="btn-primary">
@@ -78,49 +138,18 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Core metrics */}
+      {/* Multi-market overview */}
       <section>
-        <h2 className="mb-4 font-display text-xl font-bold text-slate-800">Market Overview</h2>
-        {isPending && !stats ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="card p-5">
-                <div className="skeleton mb-2 h-3 w-16" />
-                <div className="skeleton h-7 w-24" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            <StatCard title="TVL" value={stats ? Number(stats.totalSupply) / 1e6 : 0} prefix="$" sub={`ETH ≈ $${ethUsd.toLocaleString("en-US")}`} tone="accent" />
-            <StatCard title="Total Supply" value={stats ? Number(stats.totalSupply) / 1e6 : 0} suffix=" USDC" />
-            <StatCard title="Total Borrow" value={stats ? Number(stats.totalBorrows) / 1e6 : 0} suffix=" USDC" />
-            <StatCard title="Utilization" value={utilPct} suffix="%" />
-            <StatCard
-              title="Available Liquidity"
-              value={stats ? Number(stats.cash) / 1e6 : 0}
-              suffix=" USDC"
-              sub="Withdrawals may fail if liquidity is insufficient."
-            />
-            <div className="card card-hover p-5">
-              <div className="stat-title">Supply APY</div>
-              <SupplyApyDisplay currentPct={supplyAprPct} utilPct={utilPct} />
-              <div className="mt-1 text-xs text-slate-500">
-                7D Avg (est.) ~{supply7d.toFixed(2)}% — not historical data
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                Projected APY based on current market conditions. Rates are variable and may change
-                at any time.
-              </div>
-            </div>
-          </div>
-        )}
-        {stats && utilPct < 20 && (
-          <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-200">
-            Borrow demand is low — pool funds are mostly idle, so Supply APY may stay low until
-            utilization rises.
-          </div>
-        )}
+        <h2 className="mb-4 font-display text-xl font-bold text-slate-800">Markets</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {BORROW_MARKETS.map((m) => (
+            <MarketCard key={m.id} market={m} />
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Each borrow asset is an independent market with its own utilization, rates, reserve and
+          bad-debt accounting. Collateral: ETH, wstETH and WBTC are shared across markets.
+        </p>
       </section>
 
       {/* Rate curve + reserve/treasury */}
@@ -134,23 +163,23 @@ export default function HomePage() {
         </div>
         <div className="grid gap-4">
           <div className="card card-hover p-5">
-            <div className="stat-title">Risk Reserve</div>
+            <div className="stat-title">Risk Reserve (USDC)</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">
               {stats ? `${(Number(stats.totalReserve) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "--"}
             </div>
             <div className="mt-1 text-xs text-slate-500">First-loss buffer · target 3% of borrows</div>
           </div>
           <div className="card card-hover p-5">
-            <div className="stat-title">Treasury</div>
+            <div className="stat-title">Treasury (USDC)</div>
             <div className="mt-1 text-2xl font-bold text-slate-900">
               {stats ? `${(Number(stats.treasuryAccrued) / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC` : "--"}
             </div>
             <div className="mt-1 text-xs text-slate-500">Pending protocol fees</div>
           </div>
           <div className="card card-hover p-5">
-            <div className="stat-title">Historical Max Drawdown</div>
-            <div className="mt-1 text-2xl font-bold text-red-600">~12.4%</div>
-            <div className="mt-1 text-xs text-slate-500">Estimate from historical simulations</div>
+            <div className="stat-title">USDC Utilization</div>
+            <div className="mt-1 text-2xl font-bold text-slate-900">{utilPct.toFixed(2)}%</div>
+            <div className="mt-1 text-xs text-slate-500">Current borrow demand in the USDC market</div>
           </div>
         </div>
       </section>
@@ -161,7 +190,8 @@ export default function HomePage() {
         <p className="mb-4 text-sm text-slate-500">
           Pick a tier. Higher LTV tiers offer greater capital efficiency but carry higher
           liquidation risk and higher interest rates. Select a tier aligned with your risk
-          tolerance.
+          tolerance. LTV limits are calibrated per collateral asset (e.g. WBTC uses a conservative
+          table).
         </p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {TIERS.map((t) => (

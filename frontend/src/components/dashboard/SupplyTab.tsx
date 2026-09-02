@@ -3,38 +3,40 @@
 import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
-import { LendingPoolAbi, MockUSDCAbi } from "@/lib/abis";
-import { ADDRESSES, MIN_SUPPLY } from "@/lib/config";
-import { usePoolStats, useUserPosition, useUsdcBalance, useUsdcAllowance } from "@/lib/hooks";
-import { formatUsdc, formatApy } from "@/lib/format";
+import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
+import { ADDRESSES, MIN_SUPPLY, type MarketInfo } from "@/lib/config";
+import { useMarketStats, useUserSharesOf, useTokenBalance, useTokenAllowance } from "@/lib/hooks";
+import { formatToken, numToRaw } from "@/lib/format";
 import { SupplyApyDisplay } from "@/components/ApyDisplay";
 import { TxStatus } from "./TxStatus";
 
-export function SupplyTab() {
+export function SupplyTab({ market }: { market: MarketInfo }) {
   const { address } = useAccount();
   const [amount, setAmount] = useState("");
-  const { stats } = usePoolStats();
-  const { position } = useUserPosition(address as Address);
-  const balance = useUsdcBalance(address as Address);
-  const { allowance } = useUsdcAllowance(address as Address, ADDRESSES.lendingPool as Address);
+  const { stats } = useMarketStats(market.id);
+  const shares = useUserSharesOf(address as Address, market.id);
+  const balance = useTokenBalance(market.address as Address, address as Address);
+  const { allowance } = useTokenAllowance(
+    market.address as Address,
+    address as Address,
+    ADDRESSES.lendingPool as Address,
+  );
 
   const amountNum = parseFloat(amount);
-  const raw = amountNum > 0 ? BigInt(Math.floor(amountNum * 1e6)) : 0n;
+  const raw = numToRaw(amountNum, market.decimals);
   const needApproval = raw > 0n && allowance < raw;
 
   const { data: hash, isPending, writeContract } = useWriteContract();
 
   const supplyAprPct = stats ? (Number(stats.supplyApr) / 1e18) * 100 : undefined;
   const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;
-  // 7-day average supply APY — demo estimate around the current value.
   const supply7d = supplyAprPct !== undefined ? supplyAprPct * (0.96 + (supplyAprPct % 0.08) / 100) : undefined;
-  const valid = amountNum >= MIN_SUPPLY && raw > 0n && raw <= (balance ?? 0n);
+  const valid = amountNum >= MIN_SUPPLY && raw > 0n && raw <= balance;
+  const shareValue = stats && stats.supplyIndex > 0n ? (shares * stats.supplyIndex) / BigInt(1e18) : 0n;
 
   const utilAfter =
-    stats && Number(stats.cash) + Number(raw) + Number(stats.totalBorrows) > 0
-      ? (Number(stats.totalBorrows) /
-          (Number(stats.cash) + Number(raw) + Number(stats.totalBorrows))) *
-        100
+    stats && Number(stats.cash) + Number(raw) + Number(stats.borrows) > 0
+      ? (Number(stats.borrows) / (Number(stats.cash) + Number(raw) + Number(stats.borrows))) * 100
       : 0;
 
   return (
@@ -46,7 +48,7 @@ export function SupplyTab() {
         depositing.
       </div>
       <div>
-        <label className="label">Amount (USDC)</label>
+        <label className="label">Amount ({market.symbol})</label>
         <input
           type="number"
           min={MIN_SUPPLY}
@@ -56,7 +58,8 @@ export function SupplyTab() {
           onChange={(e) => setAmount(e.target.value)}
         />
         <p className="mt-1 text-xs text-slate-500">
-          Minimum {MIN_SUPPLY} USDC · Available: {formatUsdc(balance)} USDC
+          Minimum {MIN_SUPPLY} {market.symbol} · Available: {formatToken(balance, market.decimals)}{" "}
+          {market.symbol}
         </p>
       </div>
       <div className="flex items-center justify-between gap-3">
@@ -65,7 +68,7 @@ export function SupplyTab() {
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Supply APY · 7D Avg (est.)</span>
-        <span className="text-slate-800">{formatApy(supply7d)}</span>
+        <span className="text-slate-800">{supply7d !== undefined ? `~${supply7d.toFixed(2)}%` : "--"}</span>
       </div>
       <p className="-mt-2 text-[11px] text-slate-400">
         7D average is estimated from the current rate model — not historical data.
@@ -82,14 +85,14 @@ export function SupplyTab() {
           disabled={!address || !valid || isPending}
           onClick={() =>
             writeContract({
-              address: ADDRESSES.usdc as Address,
-              abi: MockUSDCAbi,
+              address: market.address as Address,
+              abi: MockTokenAbi,
               functionName: "approve",
               args: [ADDRESSES.lendingPool as Address, raw],
             })
           }
         >
-          {isPending ? "Approving…" : "Approve USDC"}
+          {isPending ? "Approving…" : `Approve ${market.symbol}`}
         </button>
       ) : (
         <button
@@ -100,7 +103,7 @@ export function SupplyTab() {
               address: ADDRESSES.lendingPool as Address,
               abi: LendingPoolAbi,
               functionName: "supply",
-              args: [raw],
+              args: [BigInt(market.id), raw],
             })
           }
         >
@@ -111,14 +114,12 @@ export function SupplyTab() {
       <div className="border-t border-slate-200/70 pt-3 text-sm">
         <div className="flex justify-between">
           <span className="text-slate-500">Your supply shares</span>
-          <span className="text-slate-800">{position ? formatUsdc(position.shares) : "--"}</span>
+          <span className="text-slate-800">{formatToken(shares, market.decimals)}</span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-500">Current share value</span>
           <span className="text-slate-800">
-            {position && stats
-              ? formatUsdc((position.shares * stats.supplyIndex) / BigInt(1e18))
-              : "--"}
+            {stats ? formatToken(shareValue, market.decimals) : "--"}
           </span>
         </div>
       </div>

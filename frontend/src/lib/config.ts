@@ -1,4 +1,6 @@
-import deployments from "./deployments/sepolia.json";
+import deploymentsRaw from "./deployments/sepolia.json";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const deployments = deploymentsRaw as any;
 
 export const CHAIN_ID = 11155111;
 export const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
@@ -6,6 +8,10 @@ export const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 export const ADDRESSES = {
   lendingPool: deployments.lendingPool,
   usdc: deployments.usdc,
+  usdt: deployments.usdt,
+  dai: deployments.dai,
+  wsteth: deployments.wsteth,
+  wbtc: deployments.wbtc,
   switchableOracle: deployments.switchableOracle,
   chainlinkOracle: deployments.oracle,
   interestRateModel: deployments.interestRateModel,
@@ -51,3 +57,55 @@ export const RISK_COLOR: Record<string, string> = {
   "Very High": "#ef4444",
   Extreme: "#b91c1c",
 };
+
+// ==================== V2 multi-asset ====================
+
+export interface MarketInfo {
+  id: number;
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  stable: boolean;
+}
+
+export interface CollateralInfo {
+  id: number;
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  native: boolean; // native ETH
+}
+
+// Borrow markets (order = pool marketId; 0 = USDC default).
+export const BORROW_MARKETS: MarketInfo[] = [
+  { id: 0, symbol: "USDC", name: "USD Coin", address: deployments.usdc, decimals: 6, stable: true },
+  { id: 1, symbol: "USDT", name: "Tether USD", address: deployments.usdt, decimals: 6, stable: true },
+  { id: 2, symbol: "DAI", name: "Dai Stablecoin", address: deployments.dai, decimals: 18, stable: true },
+];
+
+// Collateral assets (order = pool collateral id; 0 = native ETH).
+export const COLLATERALS: CollateralInfo[] = [
+  { id: 0, symbol: "ETH", name: "Ether", address: ETH_ADDRESS, decimals: 18, native: true },
+  { id: 1, symbol: "wstETH", name: "Wrapped Staked ETH", address: deployments.wsteth, decimals: 18, native: false },
+  { id: 2, symbol: "WBTC", name: "Wrapped Bitcoin", address: deployments.wbtc, decimals: 8, native: false },
+];
+
+export const ETH = ETH_ADDRESS;
+export const SCALE = 1_000_000_000_000_000_000n; // 1e18 (WAD)
+
+// Per-collateral LTV / liquidation thresholds (mirrors RiskManager V2).
+// tiers 1..5 → maxLTV % and liquidation threshold %.
+export const COLLATERAL_TIER_LTV: Record<string, number[]> = {
+  ETH: [50, 60, 70, 75, 80],
+  wstETH: [50, 60, 70, 75, 80],
+  WBTC: [45, 55, 65, 70, 75],
+};
+export const COLLATERAL_TIER_LT: Record<string, number[]> = {
+  ETH: [60, 70, 78, 85, 90],
+  wstETH: [60, 70, 78, 85, 90],
+  WBTC: [55, 65, 75, 80, 85],
+};
+
+export const MIN_COLLATERAL_TOKENS = 0.01; // whole tokens
