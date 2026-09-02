@@ -99,6 +99,10 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
           higher interest rates. Select a tier aligned with your risk tolerance. LTV/LT limits are
           applied per collateral asset (WBTC uses a conservative table).
         </p>
+        <p className="mt-1 text-xs font-semibold text-slate-700">
+          Selected {cfg.ltv}% LTV → max borrowable: {formatToken(maxRaw, market.decimals)}{" "}
+          {market.symbol}
+        </p>
       </div>
 
       {tierLocked && (
