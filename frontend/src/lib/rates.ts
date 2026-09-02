@@ -15,3 +15,15 @@ export function borrowAprAt(utilPct: number, tier: number): number {
 export function supplyAprAt(utilPct: number, avgBorrowRatePct: number): number {
   return avgBorrowRatePct * (utilPct / 100) * 0.94; // 94% depositor share
 }
+
+// Projected supply APY: assumes a fixed utilization (80%) and 94% depositor share.
+export const PROJECTED_UTIL_PCT = 80;
+export function projectedSupplyApyPct(): number {
+  const r = borrowAprAt(PROJECTED_UTIL_PCT, 1); // tier-1 borrow rate at 80% utilization
+  return r * (PROJECTED_UTIL_PCT / 100) * 0.94;
+}
+
+// Upper bound for borrow APR display at a defined high utilization.
+export function borrowAprUpperPct(tier: number, highUtilPct = 90): number {
+  return borrowAprAt(highUtilPct, tier);
+}

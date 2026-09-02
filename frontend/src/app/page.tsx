@@ -5,6 +5,7 @@ import { StatCard } from "@/components/StatCard";
 import { RiskCard } from "@/components/RiskCard";
 import { UtilizationRing } from "@/components/UtilizationRing";
 import { RateCurve } from "@/components/RateCurve";
+import { SupplyApyDisplay } from "@/components/ApyDisplay";
 import { TIERS } from "@/lib/config";
 
 export default function HomePage() {
@@ -101,14 +102,13 @@ export default function HomePage() {
               suffix=" USDC"
               sub="Withdrawals may fail if liquidity is insufficient."
             />
-            <StatCard
-              title="Supply APY"
-              value={supplyAprPct}
-              prefix="~"
-              suffix="%"
-              tone="success"
-              sub={`7D Avg (est.) ~${supply7d.toFixed(2)}% · Util ${utilPct.toFixed(1)}% — not historical data`}
-            />
+            <div className="card card-hover p-5">
+              <div className="stat-title">Supply APY</div>
+              <SupplyApyDisplay currentPct={supplyAprPct} utilPct={utilPct} />
+              <div className="mt-1 text-xs text-slate-500">
+                7D Avg (est.) ~{supply7d.toFixed(2)}% — not historical data
+              </div>
+            </div>
           </div>
         )}
         {stats && utilPct < 20 && (

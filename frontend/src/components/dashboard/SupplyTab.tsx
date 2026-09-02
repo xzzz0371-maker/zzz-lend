@@ -7,6 +7,7 @@ import { LendingPoolAbi, MockUSDCAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_SUPPLY } from "@/lib/config";
 import { usePoolStats, useUserPosition, useUsdcBalance, useUsdcAllowance } from "@/lib/hooks";
 import { formatUsdc, formatApy } from "@/lib/format";
+import { SupplyApyDisplay } from "@/components/ApyDisplay";
 import { TxStatus } from "./TxStatus";
 
 export function SupplyTab() {
@@ -55,9 +56,9 @@ export function SupplyTab() {
           Minimum {MIN_SUPPLY} USDC · Available: {formatUsdc(balance)} USDC
         </p>
       </div>
-      <div className="flex justify-between text-sm">
-        <span className="text-slate-500">Projected Supply APY</span>
-        <span className="text-emerald-600">{formatApy(supplyAprPct)}</span>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-slate-500">Supply APY</span>
+        <SupplyApyDisplay currentPct={supplyAprPct ?? 0} utilPct={utilPct} />
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Supply APY · 7D Avg (est.)</span>

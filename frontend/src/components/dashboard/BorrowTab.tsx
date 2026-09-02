@@ -7,7 +7,7 @@ import { LendingPoolAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_BORROW, TIERS } from "@/lib/config";
 import { useUserPosition, useMaxBorrowable, useBorrowAprs, usePoolStats } from "@/lib/hooks";
 import { formatUsdc, formatApy, formatHealthFactor, hfTone } from "@/lib/format";
-import { borrowAprAt } from "@/lib/rates";
+import { borrowAprAt, borrowAprUpperPct } from "@/lib/rates";
 import { YieldBreakdown } from "@/components/YieldBreakdown";
 import { TxStatus } from "./TxStatus";
 
@@ -114,7 +114,8 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
         <div className="flex justify-between">
           <span className="text-slate-500">Borrow APR · Tier {tier}</span>
           <span className="font-semibold text-slate-800">
-            {rangeLow.toFixed(2)}% – {rangeHigh.toFixed(2)}% / Current: {formatApy(borrowApr)}
+            {formatApy(borrowApr)} now · up to ~{borrowAprUpperPct(tier).toFixed(1)}% at high
+            utilization
           </span>
         </div>
         <div className="flex justify-between">
@@ -128,7 +129,8 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
           <span className="text-slate-800">{utilPct.toFixed(2)}%</span>
         </div>
         <p className="pt-1 text-[11px] text-slate-400">
-          7D ranges are estimated from the current rate model — not historical data.
+          Rates are variable. "Up to" assumes ~90% utilization; 7D ranges are estimated from the
+          current rate model — not historical data.
         </p>
         <div className="flex justify-between">
           <span className="text-slate-500">Max LTV</span>
