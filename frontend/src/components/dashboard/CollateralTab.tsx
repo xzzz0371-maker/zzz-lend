@@ -87,7 +87,7 @@ gas: TX_GAS,
               })
             }
           >
-            {isPending ? "Approving…" : `Approve ${coll.symbol}`}
+            {isPending ? "Waiting for wallet…" : `Approve ${coll.symbol}`}
           </button>
         ) : (
           <button
@@ -112,7 +112,7 @@ gas: TX_GAS,
                   })
             }
           >
-            {isPending ? "Depositing…" : `Deposit ${coll.symbol}`}
+            {isPending ? "Waiting for wallet…" : `Deposit ${coll.symbol}`}
           </button>
         )}
         <button
@@ -136,9 +136,12 @@ gas: TX_GAS,
                 })
           }
         >
-          {isPending ? "Withdrawing…" : `Withdraw ${coll.symbol}`}
+          {isPending ? "Waiting for wallet…" : `Withdraw ${coll.symbol}`}
         </button>
       </div>
+      {isPending && (
+        <p className="mt-1 text-xs text-amber-600">Waiting for wallet — confirm (or cancel) the pending signature if no popup appears.</p>
+      )}
       <TxStatus hash={hash} />
       {!coll.native && (
         <button className="mt-1 text-[11px] text-accent hover:underline" onClick={() => refetchAllowance()}>
