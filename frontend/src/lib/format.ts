@@ -64,17 +64,21 @@ export function truncateAddress(addr: string | undefined): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
+// HF > 1e30 WAD（≈无债务）视为 "∞"，避免 uint256::max 转 number 后显示天文数字。
+const HF_INFINITY_BIG = 10n ** 30n;
+
 export function formatHealthFactor(hf: bigint | number | undefined | null): string {
   if (hf === undefined || hf === null) return "--";
   const n = Number(hf) / 1e18;
-  return n === Number.MAX_SAFE_INTEGER ? "∞" : formatAmount(n, 2);
+  if (n === Number.MAX_SAFE_INTEGER || (typeof hf === "bigint" && hf >= HF_INFINITY_BIG)) return "∞";
+  return formatAmount(n, 2);
 }
 
 // Color-coded HF helper.
 export function hfTone(hf: bigint | number | undefined | null): "success" | "warning" | "danger" {
   if (hf === undefined || hf === null) return "danger";
   const n = Number(hf) / 1e18;
-  if (n >= 1.5) return "success";
+  if (!isFinite(n) || n >= 1.5) return "success";
   if (n >= 1) return "warning";
   return "danger";
 }
