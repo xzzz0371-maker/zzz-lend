@@ -5,19 +5,22 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IReserveManager {
-    /// @notice Transfers `amount` USDC to the configured lending pool (bad debt coverage).
-    function coverBadDebt(uint256 amount) external;
+    /// @notice Transfers `amount` of `token` to the configured lending pool (bad debt coverage).
+    function coverBadDebt(address token, uint256 amount) external;
 }
 
+/// @notice 储备管理器（V2 多市场版）。储备按 token 分别存放/覆盖；首个 token（构造传入）为默认 token，
+///         提供 balance()/coverBadDebt(uint256) 便捷接口（兼容 V1 调用）。
 contract ReserveManager is Ownable, IReserveManager {
-    IERC20 public immutable usdc;
+    IERC20 public immutable defaultToken;
     address public lendingPool;
 
     event LendingPoolSet(address pool);
-    event BadDebtCovered(uint256 amount);
+    event BadDebtCovered(address indexed token, uint256 amount);
 
-    constructor(address usdc_) Ownable(msg.sender) {
-        usdc = IERC20(usdc_);
+    constructor(address token_) Ownable(msg.sender) {
+        require(token_ != address(0), "zero token");
+        defaultToken = IERC20(token_);
     }
 
     function setLendingPool(address pool) external onlyOwner {
@@ -27,14 +30,29 @@ contract ReserveManager is Ownable, IReserveManager {
     }
 
     /// @notice Only the configured lending pool may trigger coverage; funds can only go back to that pool.
-    function coverBadDebt(uint256 amount) external {
-        require(msg.sender == lendingPool, "not pool");
-        require(amount > 0, "amount=0");
-        emit BadDebtCovered(amount);
-        require(usdc.transfer(lendingPool, amount), "transfer failed");
+    function coverBadDebt(address token, uint256 amount) external {
+        _coverBadDebt(token, amount);
     }
 
+    /// @notice 默认 token 便捷覆盖（兼容 V1）。
+    function coverBadDebt(uint256 amount) external {
+        _coverBadDebt(address(defaultToken), amount);
+    }
+
+    function _coverBadDebt(address token, uint256 amount) internal {
+        require(msg.sender == lendingPool, "not pool");
+        require(amount > 0, "amount=0");
+        require(token != address(0), "zero token");
+        emit BadDebtCovered(token, amount);
+        require(IERC20(token).transfer(lendingPool, amount), "transfer failed");
+    }
+
+    function balanceOf(address token) external view returns (uint256) {
+        return token == address(0) ? 0 : IERC20(token).balanceOf(address(this));
+    }
+
+    /// @notice 默认 token 余额（兼容 V1）。
     function balance() external view returns (uint256) {
-        return usdc.balanceOf(address(this));
+        return IERC20(address(defaultToken)).balanceOf(address(this));
     }
 }

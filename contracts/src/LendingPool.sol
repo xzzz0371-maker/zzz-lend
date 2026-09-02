@@ -11,50 +11,71 @@ import {IRiskManager} from "./RiskManager.sol";
 import {ILiquidationManager} from "./LiquidationManager.sol";
 import {IReserveManager} from "./ReserveManager.sol";
 
+/// @title ZZZ Lend LendingPool V2 (multi-asset)
+/// @notice 单合约多市场：可注册多个借贷资产（USDC/USDT/DAI…）与多个抵押资产（ETH/wstETH/WBTC…）。
+///         每个借贷资产为独立市场（独立现金/供应指数/利率/储备/坏账）；抵押品在池内跨资产记账。
+///         tier 为全局仓位属性：首笔借款锁定，此后所有市场的借款必须同档（与 V1 一致）。
+///         市场 0 由构造注册（默认 USDC）、抵押品 0 为原生 ETH；不带市场/抵押参数的
+///         动作与视图默认绑定市场 0 / ETH，行为与 V1 完全一致（存量测试/前端语义不变）。
 contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public constant WAD = 1e18;
     uint256 public constant MAX_TIERS = 5;
+    uint256 public constant MAX_MARKETS = 8;
+    uint256 public constant MAX_COLLATERALS = 8;
     uint256 public constant SECONDS_PER_YEAR = 31536000;
-    uint256 public constant USDC_SCALE = 1e12;
     uint256 public constant PRICE_SCALE = 1e8;
     uint256 public constant DUST_THRESHOLD = 100;
-    uint256 public constant MIN_SUPPLY = 10e6; // 最小存款 10 USDC（6位小数）
-    uint256 public constant MIN_BORROW = 100e6; // 最小借款 100 USDC
-    uint256 public constant MIN_COLLATERAL = 0.01 ether; // 最小抵押 0.01 ETH
+    uint256 public constant MIN_SUPPLY_BASE = 10; // 最小存款（整 token 数）
+    uint256 public constant MIN_BORROW_BASE = 100; // 最小借款（整 token 数）
+    uint256 public constant MIN_COLLATERAL_UNITS = 0.01 ether; // 最小抵押 0.01（WAD 形式，按精度缩放）
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     bytes32 public constant PARAM_ADMIN_ROLE = keccak256("PARAM_ADMIN_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
-    IERC20 public immutable usdc;
     IPriceOracle public priceOracle;
     IInterestRateModel public interestRateModel;
     IRiskManager public riskManager;
     ILiquidationManager public liquidationManager;
     IReserveManager public reserveManager;
 
-    struct UserPosition {
-        uint256 shares;
-        uint256 collateral;
-        uint256 borrowNorm;
-        uint256 tier;
+    struct Market {
+        IERC20 asset;
+        uint8 decimals;
+        uint8 enabled;
+        uint256 wadScale; // 10^(18-decimals)
+        uint256 cash;
+        uint256 totalShares;
+        uint256 supplyIndex;
+        uint256 lastAccrual;
+        uint256 totalReserve;
+        uint256 treasuryAccrued;
+        uint256[6] borrowIndexByTier;
+        uint256[6] totalNormalizedByTier;
     }
 
-    mapping(address => UserPosition) public positions;
+    struct Collateral {
+        address token;
+        uint8 decimals;
+        uint8 enabled;
+        uint256 wadScale;
+    }
 
-    uint256 public supplyIndex = WAD;
-    uint256 public totalShares;
-    uint256 public cash;
-    uint256 public totalReserve;
-    uint256 public lastAccrual;
-    uint256 public treasuryAccrued;
+    Market[] internal _markets;
+    Collateral[] internal _collaterals;
+    mapping(address => uint256) internal _marketIndex;
+    mapping(address => uint256) internal _collateralIndex;
+
+    mapping(address => mapping(uint8 => uint256)) public userShares;
+    mapping(address => mapping(uint8 => uint256)) public userBorrowNorm;
+    mapping(address => mapping(uint8 => uint8)) public userTier;
+    mapping(address => uint8) public userGlobalTier; // 0 = 无借款
+    mapping(address => mapping(uint256 => uint256)) public userCollateral;
+
     uint256 public reserveTargetRatio = 3e16;
     uint256 public reserveFactor = 4e16;
     uint256 public treasuryFactor = 2e16;
     address public treasuryAddress;
-
-    mapping(uint256 => uint256) public borrowIndexByTier;
-    mapping(uint256 => uint256) public totalNormalizedByTier;
 
     event Supplied(address indexed user, uint256 amount, uint256 shares);
     event Withdrawn(address indexed user, uint256 amount, uint256 shares);
@@ -86,6 +107,26 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     event TreasuryAddressUpdated(address value);
     event TreasuryCollected(uint256 amount, address to);
 
+    event MarketAdded(uint8 marketId, address indexed asset, uint8 decimals);
+    event CollateralAdded(uint8 collId, address indexed token, uint8 decimals);
+    event MarketSupplied(uint8 marketId, address indexed user, uint256 amount, uint256 shares);
+    event MarketWithdrawn(uint8 marketId, address indexed user, uint256 amount, uint256 shares);
+    event MarketBorrowed(uint8 marketId, address indexed user, uint8 tier, uint256 amount);
+    event MarketRepaid(uint8 marketId, address indexed user, uint256 amount, uint256 remainingDebt);
+    event MarketLiquidated(
+        uint8 marketId,
+        address indexed liquidator,
+        address indexed target,
+        uint8 collId,
+        uint256 debtCovered,
+        uint256 collateralSeized,
+        uint256 postHealthFactor
+    );
+    event CollateralSuppliedAsset(uint8 collId, address indexed user, uint256 amount);
+    event CollateralWithdrawnAsset(uint8 collId, address indexed user, uint256 amount);
+    event MarketReserveSkimmed(uint8 marketId, uint256 amount);
+    event MarketTreasuryCollected(uint8 marketId, uint256 amount, address to);
+
     constructor(
         IERC20 usdc_,
         IPriceOracle oracle_,
@@ -94,271 +135,153 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         ILiquidationManager liquidationManager_,
         IReserveManager reserveManager_
     ) {
-        usdc = usdc_;
         priceOracle = oracle_;
         interestRateModel = interestRateModel_;
         riskManager = riskManager_;
         liquidationManager = liquidationManager_;
         reserveManager = reserveManager_;
-        lastAccrual = block.timestamp;
-        for (uint256 i = 1; i <= MAX_TIERS; i++) {
-            borrowIndexByTier[i] = WAD;
-        }
+        _addMarketInternal(address(usdc_), 6);
+        _addCollateralInternal(ETH, 18);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(PARAM_ADMIN_ROLE, msg.sender);
         _grantRole(PAUSER_ROLE, msg.sender);
     }
 
-    // ==================== User actions ====================
+    // ==================== User actions (V1-compat: market 0 / ETH collateral) ====================
 
     function supply(uint256 amount) external nonReentrant whenNotPaused {
-        require(amount >= MIN_SUPPLY, "amount below min");
-        _accrue();
-        uint256 shares = amount * WAD / supplyIndex;
-        require(shares > 0, "shares=0");
-        positions[msg.sender].shares += shares;
-        totalShares += shares;
-        cash += amount;
+        uint256 shares = _supplyCore(0, amount);
         emit Supplied(msg.sender, amount, shares);
-        require(usdc.transferFrom(msg.sender, address(this), amount), "transfer failed");
+        emit MarketSupplied(0, msg.sender, amount, shares);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
-        require(shares > 0, "shares=0");
-        _accrue();
-        UserPosition storage pos = positions[msg.sender];
-        require(pos.shares >= shares, "insufficient shares");
-        uint256 amount = shares * supplyIndex / WAD;
-        require(cash >= amount, "insufficient liquidity");
-        pos.shares -= shares;
-        totalShares -= shares;
-        cash -= amount;
+        uint256 amount = _withdrawCore(0, shares);
         emit Withdrawn(msg.sender, amount, shares);
-        require(usdc.transfer(msg.sender, amount), "transfer failed");
+        emit MarketWithdrawn(0, msg.sender, amount, shares);
     }
 
     function supplyCollateral() external payable nonReentrant whenNotPaused {
-        require(msg.value >= MIN_COLLATERAL, "value below min");
-        require(!_oracleAnomalous(), "price anomalous");
-        positions[msg.sender].collateral += msg.value;
-        emit CollateralSupplied(msg.sender, msg.value);
+        uint256 amount = _supplyCollateralCore(0, msg.value);
+        emit CollateralSupplied(msg.sender, amount);
+        emit CollateralSuppliedAsset(0, msg.sender, amount);
     }
 
     function withdrawCollateral(uint256 amount) external nonReentrant {
-        require(amount > 0, "amount=0");
-        _accrue();
-        UserPosition storage pos = positions[msg.sender];
-        require(pos.collateral >= amount, "insufficient collateral");
-        uint256 debtWad = _getDebtWad(pos);
-        if (debtWad > 0) {
-            uint256 newValueWad = (pos.collateral - amount) * priceOracle.getAssetPrice(ETH) / PRICE_SCALE;
-            uint256 hf = riskManager.getHealthFactor(pos.tier, newValueWad, debtWad);
-            require(hf >= WAD, "unhealthy");
-        }
-        pos.collateral -= amount;
+        _withdrawCollateralCore(0, amount);
         emit CollateralWithdrawn(msg.sender, amount);
-        _safeSendEth(payable(msg.sender), amount);
+        emit CollateralWithdrawnAsset(0, msg.sender, amount);
     }
 
     function borrow(uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
-        require(amount >= MIN_BORROW, "amount below min");
-        require(tier >= 1 && tier <= MAX_TIERS, "bad tier");
-        require(!_oracleAnomalous(), "price anomalous");
-        _accrue();
-        UserPosition storage pos = positions[msg.sender];
-        if (pos.borrowNorm > 0) {
-            require(pos.tier == tier, "tier locked");
-        }
-        uint256 debtWad = _getDebtWad(pos);
-        uint256 collateralValueWad = _getCollateralValueWad(pos);
-        uint256 amountWad = _toWadUsd(amount);
-        riskManager.validateBorrow(tier, collateralValueWad, debtWad + amountWad);
-        require(cash >= amount, "insufficient liquidity");
-        uint256 norm = _mulDivUp(amount, WAD, borrowIndexByTier[tier]);
-        pos.borrowNorm += norm;
-        pos.tier = tier;
-        totalNormalizedByTier[tier] += norm;
-        cash -= amount;
-        uint256 newLtv = (debtWad + amountWad) * WAD / collateralValueWad;
-        uint256 hf = riskManager.getHealthFactor(tier, collateralValueWad, debtWad + amountWad);
+        (uint256 newLtv, uint256 hf) = _borrowCore(0, amount, tier);
         emit Borrowed(msg.sender, tier, amount, newLtv, hf);
-        require(usdc.transfer(msg.sender, amount), "transfer failed");
+        emit MarketBorrowed(0, msg.sender, uint8(tier), amount);
     }
 
     function repay(uint256 amount) external nonReentrant {
-        require(amount > 0, "amount=0");
-        _accrue();
-        UserPosition storage pos = positions[msg.sender];
-        require(pos.borrowNorm > 0, "no debt");
-        uint256 debt = _getDebt6(pos);
-        uint256 repayAmount = amount == type(uint256).max ? debt : (amount < debt ? amount : debt);
-        uint256 normReduction = repayAmount * WAD / borrowIndexByTier[pos.tier];
-        if (normReduction > pos.borrowNorm) normReduction = pos.borrowNorm; // 防取整下溢（F1）
-        pos.borrowNorm -= normReduction;
-        totalNormalizedByTier[pos.tier] -= normReduction;
-        if (pos.borrowNorm <= DUST_THRESHOLD) {
-            totalNormalizedByTier[pos.tier] -= pos.borrowNorm;
-            pos.borrowNorm = 0;
-            pos.tier = 0;
-        }
-        cash += repayAmount;
-        uint256 remainingDebt = _getDebtWad(pos);
+        (uint256 repayAmount, uint256 remainingDebt) = _repayCore(0, amount);
         emit Repaid(msg.sender, repayAmount, remainingDebt);
-        require(usdc.transferFrom(msg.sender, address(this), repayAmount), "transfer failed");
+        emit MarketRepaid(0, msg.sender, repayAmount, remainingDebt);
     }
 
-    /// @param minSeizeAmount 清算人接受的最低抵押品（ETH，18 位）。0 表示不限制。
-    /// @notice 若预言机被 PAUSER 暂停，读价 revert → 清算一并暂停。
-    ///         F9 设计取舍：宁可不清算，也不用可能错误/暂停中的价格清算；PAUSER 暂停 oracle 前应确认无待清算仓位。
     function liquidate(address target, uint256 debtToCover, uint256 minSeizeAmount) external nonReentrant {
-        require(target != msg.sender, "self-liquidation");
-        require(debtToCover > 0, "amount=0");
-        _accrue();
-        UserPosition storage pos = positions[target];
-        require(pos.borrowNorm > 0, "no debt");
-        uint256 debtWad = _getDebtWad(pos);
-        uint256 collateralValueWad = _getCollateralValueWad(pos);
-        uint256 hf = riskManager.getHealthFactor(pos.tier, collateralValueWad, debtWad);
-        require(hf < WAD, "not liquidatable");
-        uint256 maxCoverWad = debtWad * riskManager.getCloseFactor() / WAD;
-        uint256 coverWad = _toWadUsd(debtToCover);
-        if (coverWad > maxCoverWad) coverWad = maxCoverWad;
-        if (coverWad > debtWad) coverWad = debtWad;
-        require(coverWad > 0, "cover=0");
-        uint256 seizeValueWad =
-            liquidationManager.computeSeizeValue(collateralValueWad, coverWad, riskManager.getLiquidationBonus());
-        uint256 price = priceOracle.getAssetPrice(ETH);
-        uint256 seizeCollateral = seizeValueWad * PRICE_SCALE / price;
-        if (seizeCollateral > pos.collateral) seizeCollateral = pos.collateral;
-        require(seizeCollateral > 0, "seize=0");
-        if (minSeizeAmount > 0) require(seizeCollateral >= minSeizeAmount, "seize below min");
-        uint256 cover6 = _toUsdc6(coverWad);
-        uint256 normReduction = _mulDivUp(cover6, WAD, borrowIndexByTier[pos.tier]);
-        if (normReduction > pos.borrowNorm) normReduction = pos.borrowNorm; // 防取整下溢（F1）
-        pos.borrowNorm -= normReduction;
-        totalNormalizedByTier[pos.tier] -= normReduction;
-        if (pos.borrowNorm <= DUST_THRESHOLD) {
-            totalNormalizedByTier[pos.tier] -= pos.borrowNorm;
-            pos.borrowNorm = 0;
-            pos.tier = 0;
-        }
-        pos.collateral -= seizeCollateral;
-        cash += cover6;
-        uint256 postHf;
-        if (pos.borrowNorm == 0) {
-            postHf = type(uint256).max;
-        } else {
-            postHf = riskManager.getHealthFactor(pos.tier, _getCollateralValueWad(pos), _getDebtWad(pos));
-        }
-        emit Liquidated(msg.sender, target, cover6, seizeCollateral, postHf);
-        require(usdc.transferFrom(msg.sender, address(this), cover6), "transfer failed");
-        _safeSendEth(payable(msg.sender), seizeCollateral);
+        (uint256 covered, uint256 seized, uint256 postHf) = _liquidateCore(0, target, 0, debtToCover, minSeizeAmount);
+        emit Liquidated(msg.sender, target, covered, seized, postHf);
+        emit MarketLiquidated(0, msg.sender, target, 0, covered, seized, postHf);
     }
 
-    /// @notice 坏账即时传导：抵押归零仍有债务的仓位，先由风险储备（第一损失缓冲）覆盖可覆盖部分，
-    ///         剩余未覆盖部分即时降低 supplyIndex（所有存款人按份额承担），坏账一次性消化、不挂账。
-    ///         权限开放：任何人可调用；管理员无法直接降低 supplyIndex，只能经由本函数触发。
     function handleBadDebt(address target) external nonReentrant {
-        _accrue();
-        UserPosition storage pos = positions[target];
-        require(pos.borrowNorm > 0, "no debt");
-        require(pos.collateral == 0, "collateral exists");
-        uint256 badDebtAmount = _getDebt6(pos);
-        uint256 reserveBalance = usdc.balanceOf(address(reserveManager));
-        uint256 coveredByReserve = badDebtAmount > reserveBalance ? reserveBalance : badDebtAmount;
-        uint256 lossToDepositors = badDebtAmount - coveredByReserve;
-
-        uint256 oldSupplyIndex = supplyIndex;
-        uint256 newSupplyIndex = oldSupplyIndex;
-        uint256 remaining = lossToDepositors;
-        if (remaining > 0) {
-            // 1) 存款人按份额承担（最多承担全部净资产，即 supplyIndex 可归零）
-            uint256 supplyBefore = getTotalSupply();
-            if (supplyBefore > 0) {
-                uint256 absorbed = remaining >= supplyBefore ? supplyBefore : remaining;
-                newSupplyIndex =
-                    absorbed >= supplyBefore ? 0 : oldSupplyIndex * (supplyBefore - absorbed) / supplyBefore;
-                supplyIndex = newSupplyIndex;
-                remaining -= absorbed;
-            }
-            // 2) 超出存款人承受的部分由账面储备（第一损失缓冲的未 skim 部分）承担
-            if (remaining > 0 && totalReserve > 0) {
-                uint256 absorbed = remaining >= totalReserve ? totalReserve : remaining;
-                totalReserve -= absorbed;
-                remaining -= absorbed;
-            }
-            // 3) 仍有剩余由 Treasury 承担（协议收入兜底），保证资金守恒不变式始终成立
-            if (remaining > 0 && treasuryAccrued > 0) {
-                uint256 absorbed = remaining >= treasuryAccrued ? treasuryAccrued : remaining;
-                treasuryAccrued -= absorbed;
-                remaining -= absorbed;
-            }
-        }
-
-        // 清除该仓位全部债务（债务归零、抵押品归零）
-        totalNormalizedByTier[pos.tier] -= pos.borrowNorm;
-        pos.borrowNorm = 0;
-        pos.tier = 0;
-
-        if (coveredByReserve > 0) {
-            cash += coveredByReserve;
-            reserveManager.coverBadDebt(coveredByReserve);
-        }
-        emit BadDebtRealized(target, badDebtAmount, coveredByReserve, lossToDepositors, oldSupplyIndex, newSupplyIndex);
+        _handleBadDebtCore(0, target);
     }
 
     function skimReserve() external nonReentrant {
-        _accrue();
-        uint256 amount = totalReserve > cash ? cash : totalReserve;
-        require(amount > 0, "no reserve");
-        totalReserve -= amount;
-        cash -= amount;
+        uint256 amount = _skimReserveCore(0);
         emit ReserveSkimmed(amount);
-        require(usdc.transfer(address(reserveManager), amount), "transfer failed");
+        emit MarketReserveSkimmed(0, amount);
     }
 
     function accrue() external {
-        _accrue();
+        _accrueAll();
+    }
+
+    function collectTreasury() external nonReentrant {
+        (uint256 amount,) = _collectTreasuryCore(0);
+        emit TreasuryCollected(amount, treasuryAddress);
+        emit MarketTreasuryCollected(0, amount, treasuryAddress);
+    }
+
+    // ==================== User actions (V2: market / collateral aware) ====================
+
+    function supply(uint8 marketId, uint256 amount) external nonReentrant whenNotPaused {
+        uint256 shares = _supplyCore(marketId, amount);
+        emit MarketSupplied(marketId, msg.sender, amount, shares);
+    }
+
+    function withdraw(uint8 marketId, uint256 shares) external nonReentrant {
+        uint256 amount = _withdrawCore(marketId, shares);
+        emit MarketWithdrawn(marketId, msg.sender, amount, shares);
+    }
+
+    function supplyCollateral(address token, uint256 amount) external nonReentrant whenNotPaused {
+        uint8 collId = _requireCollateral(token);
+        require(amount >= _minCollateral(collId), "value below min");
+        _supplyCollateralCore(collId, amount);
+        emit CollateralSuppliedAsset(collId, msg.sender, amount);
+        emit CollateralSupplied(msg.sender, amount);
+    }
+
+    function withdrawCollateral(address token, uint256 amount) external nonReentrant {
+        uint8 collId = _requireCollateral(token);
+        _withdrawCollateralCore(collId, amount);
+        emit CollateralWithdrawnAsset(collId, msg.sender, amount);
+        emit CollateralWithdrawn(msg.sender, amount);
+    }
+
+    function borrow(uint8 marketId, uint256 amount, uint256 tier) external nonReentrant whenNotPaused {
+        (uint256 newLtv, uint256 hf) = _borrowCore(marketId, amount, tier);
+        emit Borrowed(msg.sender, tier, amount, newLtv, hf);
+        emit MarketBorrowed(marketId, msg.sender, uint8(tier), amount);
+    }
+
+    function repay(uint8 marketId, uint256 amount) external nonReentrant {
+        (uint256 repayAmount, uint256 remainingDebt) = _repayCore(marketId, amount);
+        emit MarketRepaid(marketId, msg.sender, repayAmount, remainingDebt);
+    }
+
+    /// @param collToken 清算人要收取的抵押品 token（ETH 哨兵或已注册 ERC20）。
+    function liquidate(address target, uint8 marketId, address collToken, uint256 debtToCover, uint256 minSeizeAmount)
+        external
+        nonReentrant
+    {
+        uint8 collId = _requireCollateral(collToken);
+        (uint256 covered, uint256 seized, uint256 postHf) =
+            _liquidateCore(marketId, target, collId, debtToCover, minSeizeAmount);
+        emit MarketLiquidated(marketId, msg.sender, target, collId, covered, seized, postHf);
+    }
+
+    function handleBadDebt(address target, uint8 marketId) external nonReentrant {
+        _handleBadDebtCore(marketId, target);
+    }
+
+    function skimReserve(uint8 marketId) external nonReentrant {
+        uint256 amount = _skimReserveCore(marketId);
+        emit MarketReserveSkimmed(marketId, amount);
+    }
+
+    function collectTreasury(uint8 marketId) external nonReentrant {
+        (uint256 amount,) = _collectTreasuryCore(marketId);
+        emit MarketTreasuryCollected(marketId, amount, treasuryAddress);
     }
 
     // ==================== Admin ====================
 
-    function setReserveTargetRatio(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
-        require(value <= WAD, "ratio>100%");
-        reserveTargetRatio = value;
-        emit ReserveTargetRatioUpdated(value);
+    function addMarket(address token, uint8 decimals) external onlyRole(PARAM_ADMIN_ROLE) {
+        _addMarketInternal(token, decimals);
     }
 
-    function setReserveFactor(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
-        require(value <= WAD, "factor>100%");
-        require(value + treasuryFactor <= WAD, "fees>100%");
-        reserveFactor = value;
-        emit ReserveFactorUpdated(value);
-    }
-
-    function setTreasuryFactor(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
-        require(value <= WAD, "fee>100%");
-        require(value + reserveFactor <= WAD, "fees>100%");
-        treasuryFactor = value;
-        emit TreasuryFactorUpdated(value);
-    }
-
-    function setTreasuryAddress(address value) external onlyRole(PARAM_ADMIN_ROLE) {
-        require(value != address(0), "zero address");
-        treasuryAddress = value;
-        emit TreasuryAddressUpdated(value);
-    }
-
-    /// @notice 任何人可调用：将累计的 Treasury USDC 转给 treasuryAddress。零地址时 revert。
-    function collectTreasury() external nonReentrant {
-        require(treasuryAddress != address(0), "treasury not set");
-        uint256 amount = treasuryAccrued;
-        require(amount > 0, "no treasury");
-        require(cash >= amount, "insufficient liquidity");
-        treasuryAccrued = 0;
-        cash -= amount;
-        emit TreasuryCollected(amount, treasuryAddress);
-        require(usdc.transfer(treasuryAddress, amount), "transfer failed");
+    function addCollateral(address token, uint8 decimals) external onlyRole(PARAM_ADMIN_ROLE) {
+        _addCollateralInternal(token, decimals);
     }
 
     function setPriceOracle(IPriceOracle oracle) external onlyRole(PARAM_ADMIN_ROLE) {
@@ -387,6 +310,32 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         reserveManager = manager;
     }
 
+    function setReserveTargetRatio(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
+        require(value <= WAD, "ratio>100%");
+        reserveTargetRatio = value;
+        emit ReserveTargetRatioUpdated(value);
+    }
+
+    function setReserveFactor(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
+        require(value <= WAD, "factor>100%");
+        require(value + treasuryFactor <= WAD, "fees>100%");
+        reserveFactor = value;
+        emit ReserveFactorUpdated(value);
+    }
+
+    function setTreasuryFactor(uint256 value) external onlyRole(PARAM_ADMIN_ROLE) {
+        require(value <= WAD, "fee>100%");
+        require(value + reserveFactor <= WAD, "fees>100%");
+        treasuryFactor = value;
+        emit TreasuryFactorUpdated(value);
+    }
+
+    function setTreasuryAddress(address value) external onlyRole(PARAM_ADMIN_ROLE) {
+        require(value != address(0), "zero address");
+        treasuryAddress = value;
+        emit TreasuryAddressUpdated(value);
+    }
+
     function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
@@ -395,68 +344,83 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         _unpause();
     }
 
-    // ==================== Views ====================
+    // ==================== Views (market 0 / V1-compat) ====================
+
+    function usdc() external view returns (IERC20) {
+        return _markets[0].asset;
+    }
 
     function getTotalBorrows() public view returns (uint256) {
-        uint256 total = 0;
-        for (uint256 t = 1; t <= MAX_TIERS; t++) {
-            total += totalNormalizedByTier[t] * borrowIndexByTier[t] / WAD;
-        }
-        return total;
+        return _totalBorrowsToken(0);
     }
 
     function getTotalSupply() public view returns (uint256) {
-        return totalShares * supplyIndex / WAD;
+        return _totalSupplyToken(0);
     }
 
     function getUtilization() public view returns (uint256) {
-        uint256 totalBorrows = getTotalBorrows();
-        uint256 total = cash + totalBorrows;
-        if (total == 0) return 0;
-        return totalBorrows * WAD / total;
+        return _utilization(0);
     }
 
     function getBorrowAPR(uint256 tier) external view returns (uint256) {
-        return interestRateModel.getBorrowRatePerSecond(getUtilization(), tier) * SECONDS_PER_YEAR;
+        return _getBorrowAPR(0, tier);
     }
 
     function getSupplyAPR() external view returns (uint256) {
-        uint256 avgRate = _getAverageBorrowRate();
-        uint256 utilization = getUtilization();
-        uint256 totalFee = reserveFactor + treasuryFactor;
-        return avgRate * utilization * (WAD - totalFee) / WAD / WAD * SECONDS_PER_YEAR;
+        return _getSupplyAPR(0);
+    }
+
+    function cash() external view returns (uint256) {
+        return _markets[0].cash;
+    }
+
+    function totalShares() external view returns (uint256) {
+        return _markets[0].totalShares;
+    }
+
+    function supplyIndex() external view returns (uint256) {
+        return _markets[0].supplyIndex;
+    }
+
+    function totalReserve() external view returns (uint256) {
+        return _markets[0].totalReserve;
+    }
+
+    function treasuryAccrued() external view returns (uint256) {
+        return _markets[0].treasuryAccrued;
+    }
+
+    function depositorShare() public view returns (uint256) {
+        return WAD - reserveFactor - treasuryFactor;
     }
 
     function getDebt(address user) external view returns (uint256) {
-        return _getDebtWad(positions[user]);
+        return _debtValueWad(user);
     }
 
     function getCollateralValue(address user) external view returns (uint256) {
-        return _getCollateralValueWad(positions[user]);
+        return _collateralValueWad(user);
     }
 
     function getUserHealthFactor(address user) external view returns (uint256) {
-        UserPosition storage pos = positions[user];
-        uint256 debtWad = _getDebtWad(pos);
+        uint256 debtWad = _debtValueWad(user);
         if (debtWad == 0) return type(uint256).max;
-        return riskManager.getHealthFactor(pos.tier, _getCollateralValueWad(pos), debtWad);
+        return _healthFactor(user, debtWad);
     }
 
     function isLiquidatable(address user) external view returns (bool) {
-        UserPosition storage pos = positions[user];
-        uint256 debtWad = _getDebtWad(pos);
+        uint256 debtWad = _debtValueWad(user);
         if (debtWad == 0) return false;
-        return riskManager.getHealthFactor(pos.tier, _getCollateralValueWad(pos), debtWad) < WAD;
+        return _healthFactor(user, debtWad) < WAD;
     }
 
     function maxBorrowable(address user, uint256 tier) external view returns (uint256) {
-        UserPosition storage pos = positions[user];
-        uint256 collateralValueWad = _getCollateralValueWad(pos);
-        uint256 debtWad = _getDebtWad(pos);
-        if (pos.borrowNorm > 0 && pos.tier != tier) return 0;
-        uint256 capacity = collateralValueWad * riskManager.getMaxLTV(tier) / WAD;
+        if (userGlobalTier[user] != 0 && uint256(userGlobalTier[user]) != tier) return 0;
+        uint256 debtWad = _debtValueWad(user);
+        uint256 capacity = _collateralPower(user, tier);
         if (debtWad >= capacity) return 0;
-        return _toUsdc6(capacity - debtWad);
+        Market storage m = _markets[0];
+        return _wadToAmount(capacity - debtWad, m.wadScale, _priceOf(address(m.asset)));
     }
 
     function getUserPosition(address user)
@@ -472,136 +436,601 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             bool liquidatable
         )
     {
-        UserPosition storage pos = positions[user];
-        shares = pos.shares;
-        collateral = pos.collateral;
-        debt = _getDebtWad(pos);
-        collateralValue = _getCollateralValueWad(pos);
-        tier = pos.tier;
+        shares = userShares[user][0];
+        collateral = userCollateral[user][0];
+        debt = _debtValueWad(user);
+        collateralValue = _collateralValueWad(user);
+        tier = userGlobalTier[user];
         if (debt == 0) {
             healthFactor = type(uint256).max;
         } else {
-            healthFactor = riskManager.getHealthFactor(pos.tier, collateralValue, debt);
+            healthFactor = _healthFactor(user, debt);
         }
         liquidatable = healthFactor < WAD;
     }
 
-    // ==================== Internal ====================
+    // ==================== Views (V2) ====================
 
-    /// @notice 存款人分得比例 = 100% - reserveFactor - treasuryFactor（默认 92%）。
-    function depositorShare() public view returns (uint256) {
-        return WAD - reserveFactor - treasuryFactor;
+    function marketCount() external view returns (uint256) {
+        return _markets.length;
     }
 
-    function _accrue() internal {
+    function collateralCount() external view returns (uint256) {
+        return _collaterals.length;
+    }
+
+    function marketAsset(uint8 marketId) external view returns (IERC20) {
+        return _market(marketId).asset;
+    }
+
+    function marketCash(uint8 marketId) external view returns (uint256) {
+        return _market(marketId).cash;
+    }
+
+    function marketDecimals(uint8 marketId) external view returns (uint8) {
+        return _market(marketId).decimals;
+    }
+
+    function marketReserve(uint8 marketId) external view returns (uint256) {
+        return _market(marketId).totalReserve;
+    }
+
+    function marketTreasury(uint8 marketId) external view returns (uint256) {
+        return _market(marketId).treasuryAccrued;
+    }
+
+    function marketSupply(uint8 marketId) external view returns (uint256) {
+        return _totalSupplyToken(marketId);
+    }
+
+    function marketBorrows(uint8 marketId) external view returns (uint256) {
+        return _totalBorrowsToken(marketId);
+    }
+
+    function marketUtilization(uint8 marketId) external view returns (uint256) {
+        return _utilization(marketId);
+    }
+
+    function marketSupplyAPR(uint8 marketId) external view returns (uint256) {
+        return _getSupplyAPR(marketId);
+    }
+
+    function marketBorrowAPR(uint8 marketId, uint256 tier) external view returns (uint256) {
+        return _getBorrowAPR(marketId, tier);
+    }
+
+    function userSharesOf(address user, uint8 marketId) external view returns (uint256) {
+        return userShares[user][marketId];
+    }
+
+    function userCollateralOf(address user, uint256 collId) external view returns (uint256) {
+        return userCollateral[user][collId];
+    }
+
+    function userDebtToken(address user, uint8 marketId) external view returns (uint256) {
+        uint8 t = userTier[user][marketId];
+        if (t == 0) return 0;
+        return (userBorrowNorm[user][marketId] * _market(marketId).borrowIndexByTier[t] + WAD - 1) / WAD;
+    }
+
+    function userDebtValueWad(address user) external view returns (uint256) {
+        return _debtValueWad(user);
+    }
+
+    function collateralToken(uint256 collId) external view returns (address) {
+        return _collaterals[collId].token;
+    }
+
+    function getUserPositionV2(address user)
+        external
+        view
+        returns (uint256 debtWad, uint256 collateralValueWad, uint256 healthFactor, bool liquidatable)
+    {
+        debtWad = _debtValueWad(user);
+        collateralValueWad = _collateralValueWad(user);
+        if (debtWad == 0) {
+            healthFactor = type(uint256).max;
+            liquidatable = false;
+        } else {
+            healthFactor = _healthFactor(user, debtWad);
+            liquidatable = healthFactor < WAD;
+        }
+    }
+
+    // ==================== Internal core ====================
+
+    function _addMarketInternal(address token, uint8 decimals) internal {
+        require(token != address(0) && token != ETH, "bad asset");
+        require(_marketIndex[token] == 0, "market exists");
+        require(_markets.length < MAX_MARKETS, "too many markets");
+        Market storage m = _markets.push();
+        m.asset = IERC20(token);
+        m.decimals = decimals;
+        m.enabled = 1;
+        m.wadScale = _pow10(18 - uint256(decimals));
+        m.supplyIndex = WAD;
+        m.lastAccrual = block.timestamp;
+        for (uint256 t = 1; t <= MAX_TIERS; t++) {
+            m.borrowIndexByTier[t] = WAD;
+        }
+        _marketIndex[token] = _markets.length;
+        emit MarketAdded(uint8(_markets.length - 1), token, decimals);
+    }
+
+    function _addCollateralInternal(address token, uint8 decimals) internal {
+        require(token != address(0), "zero token");
+        require(_collateralIndex[token] == 0, "collateral exists");
+        require(_collaterals.length < MAX_COLLATERALS, "too many collaterals");
+        Collateral storage c = _collaterals.push();
+        c.token = token;
+        c.decimals = decimals;
+        c.enabled = 1;
+        c.wadScale = _pow10(18 - uint256(decimals));
+        _collateralIndex[token] = _collaterals.length;
+        emit CollateralAdded(uint8(_collaterals.length - 1), token, decimals);
+    }
+
+    function _supplyCore(uint8 marketId, uint256 amount) internal returns (uint256 shares) {
+        Market storage m = _market(marketId);
+        require(amount >= _minSupply(m), "amount below min");
+        _accrueMarket(marketId);
+        shares = amount * WAD / m.supplyIndex;
+        require(shares > 0, "shares=0");
+        userShares[msg.sender][marketId] += shares;
+        m.totalShares += shares;
+        m.cash += amount;
+        require(m.asset.transferFrom(msg.sender, address(this), amount), "transfer failed");
+    }
+
+    function _withdrawCore(uint8 marketId, uint256 shares) internal returns (uint256 amount) {
+        Market storage m = _market(marketId);
+        require(shares > 0, "shares=0");
+        _accrueMarket(marketId);
+        require(userShares[msg.sender][marketId] >= shares, "insufficient shares");
+        amount = shares * m.supplyIndex / WAD;
+        require(m.cash >= amount, "insufficient liquidity");
+        userShares[msg.sender][marketId] -= shares;
+        m.totalShares -= shares;
+        m.cash -= amount;
+        require(m.asset.transfer(msg.sender, amount), "transfer failed");
+    }
+
+    function _supplyCollateralCore(uint8 collId, uint256 amount) internal returns (uint8) {
+        require(!_oracleAnomalous(), "price anomalous");
+        require(amount >= _minCollateral(collId), "value below min");
+        userCollateral[msg.sender][collId] += amount;
+        if (_collaterals[collId].token != ETH) {
+            require(
+                IERC20(_collaterals[collId].token).transferFrom(msg.sender, address(this), amount), "transfer failed"
+            );
+        }
+        return collId;
+    }
+
+    function _withdrawCollateralCore(uint8 collId, uint256 amount) internal {
+        require(amount > 0, "amount=0");
+        _accrueAll();
+        require(userCollateral[msg.sender][collId] >= amount, "insufficient collateral");
+        if (_debtValueWad(msg.sender) > 0) {
+            userCollateral[msg.sender][collId] -= amount;
+            uint256 hf = _healthFactor(msg.sender, _debtValueWad(msg.sender));
+            require(hf >= WAD, "unhealthy");
+            userCollateral[msg.sender][collId] += amount;
+        }
+        userCollateral[msg.sender][collId] -= amount;
+        if (_collaterals[collId].token == ETH) {
+            _safeSendEth(payable(msg.sender), amount);
+        } else {
+            require(IERC20(_collaterals[collId].token).transfer(msg.sender, amount), "transfer failed");
+        }
+    }
+
+    function _borrowCore(uint8 marketId, uint256 amount, uint256 tier)
+        internal
+        returns (uint256 newLtv, uint256 healthFactor)
+    {
+        Market storage m = _market(marketId);
+        require(amount >= _minBorrow(m), "amount below min");
+        require(tier >= 1 && tier <= MAX_TIERS, "bad tier");
+        require(tier <= riskManager.getMaxBorrowTier(), "tier disabled");
+        require(!_oracleAnomalous(), "price anomalous");
+        _accrueMarket(marketId);
+        require(_collateralValueWad(msg.sender) > 0, "no collateral");
+        if (userGlobalTier[msg.sender] != 0) {
+            require(uint256(userGlobalTier[msg.sender]) == tier, "tier locked");
+        }
+        uint256 debtWadBefore = _debtValueWad(msg.sender);
+        uint256 amountWad = _amountToWadUsd(amount, m.wadScale, _priceOf(address(m.asset)));
+        uint256 newDebtWad = debtWadBefore + amountWad;
+        uint256 capacity = _collateralPower(msg.sender, tier);
+        require(newDebtWad <= capacity, "ltv too high");
+        require(m.cash >= amount, "insufficient liquidity");
+        uint256 norm = _mulDivUp(amount, WAD, m.borrowIndexByTier[tier]);
+        userBorrowNorm[msg.sender][marketId] += norm;
+        userTier[msg.sender][marketId] = uint8(tier);
+        m.totalNormalizedByTier[tier] += norm;
+        m.cash -= amount;
+        if (userGlobalTier[msg.sender] == 0) {
+            userGlobalTier[msg.sender] = uint8(tier);
+        }
+        newLtv = newDebtWad * WAD / _collateralValueWad(msg.sender);
+        healthFactor = _healthFactor(msg.sender, newDebtWad);
+        require(m.asset.transfer(msg.sender, amount), "transfer failed");
+    }
+
+    function _repayCore(uint8 marketId, uint256 amount) internal returns (uint256 repayAmount, uint256 remainingDebt) {
+        Market storage m = _market(marketId);
+        require(amount > 0, "amount=0");
+        _accrueMarket(marketId);
+        uint8 t = userTier[msg.sender][marketId];
+        require(t > 0, "no debt");
+        uint256 debt = (userBorrowNorm[msg.sender][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
+        repayAmount = amount == type(uint256).max ? debt : (amount < debt ? amount : debt);
+        uint256 normReduction = repayAmount * WAD / m.borrowIndexByTier[t];
+        if (normReduction > userBorrowNorm[msg.sender][marketId]) normReduction = userBorrowNorm[msg.sender][marketId];
+        userBorrowNorm[msg.sender][marketId] -= normReduction;
+        m.totalNormalizedByTier[t] -= normReduction;
+        if (userBorrowNorm[msg.sender][marketId] <= DUST_THRESHOLD) {
+            m.totalNormalizedByTier[t] -= userBorrowNorm[msg.sender][marketId];
+            userBorrowNorm[msg.sender][marketId] = 0;
+            userTier[msg.sender][marketId] = 0;
+        }
+        m.cash += repayAmount;
+        if (!_anyBorrow(msg.sender)) userGlobalTier[msg.sender] = 0;
+        remainingDebt = _debtValueWad(msg.sender);
+        require(m.asset.transferFrom(msg.sender, address(this), repayAmount), "transfer failed");
+    }
+
+    function _liquidateCore(uint8 marketId, address target, uint8 collId, uint256 debtToCover, uint256 minSeizeAmount)
+        internal
+        returns (uint256 covered, uint256 seized, uint256 postHf)
+    {
+        require(target != msg.sender, "self-liquidation");
+        require(debtToCover > 0, "amount=0");
+        _accrueAll();
+        Market storage m = _market(marketId);
+        uint8 t = userTier[target][marketId];
+        require(t > 0, "no debt");
+        uint256 debtWad = _debtValueWad(target);
+        uint256 debtToken = (userBorrowNorm[target][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
+        uint256 hf = _healthFactor(target, debtWad);
+        require(hf < WAD, "not liquidatable");
+        // 先按该市场债务（token 单位）封顶再换算 USD，避免超大 debtToCover 输入在乘法中溢出
+        uint256 coverRequest = debtToCover > debtToken ? debtToken : debtToCover;
+        uint256 coverWad = _amountToWadUsd(coverRequest, m.wadScale, _priceOf(address(m.asset)));
+        if (coverWad > debtWad * riskManager.getCloseFactor() / WAD) {
+            coverWad = debtWad * riskManager.getCloseFactor() / WAD;
+        }
+        if (coverWad > debtWad) coverWad = debtWad;
+        require(coverWad > 0, "cover=0");
+        uint256 seizeValueWad = liquidationManager.computeSeizeValue(
+            _collateralValueWad(target), coverWad, riskManager.getLiquidationBonus()
+        );
+        uint256 seizeAmount =
+            _wadToAmount(seizeValueWad, _collaterals[collId].wadScale, _priceOf(_collaterals[collId].token));
+        uint256 posColl = userCollateral[target][collId];
+        if (seizeAmount > posColl) seizeAmount = posColl;
+        require(seizeAmount > 0, "seize=0");
+        if (minSeizeAmount > 0) require(seizeAmount >= minSeizeAmount, "seize below min");
+        uint256 coverAmount = _wadToAmount(coverWad, m.wadScale, _priceOf(address(m.asset)));
+        if (coverAmount > debtToken) coverAmount = debtToken;
+        uint256 normReduction = _mulDivUp(coverAmount, WAD, m.borrowIndexByTier[t]);
+        if (normReduction > userBorrowNorm[target][marketId]) normReduction = userBorrowNorm[target][marketId];
+        userBorrowNorm[target][marketId] -= normReduction;
+        m.totalNormalizedByTier[t] -= normReduction;
+        if (userBorrowNorm[target][marketId] <= DUST_THRESHOLD) {
+            m.totalNormalizedByTier[t] -= userBorrowNorm[target][marketId];
+            userBorrowNorm[target][marketId] = 0;
+            userTier[target][marketId] = 0;
+        }
+        userCollateral[target][collId] -= seizeAmount;
+        m.cash += coverAmount;
+        covered = coverAmount;
+        seized = seizeAmount;
+        if (!_anyBorrow(target)) userGlobalTier[target] = 0;
+        if (_debtValueWad(target) == 0) {
+            postHf = type(uint256).max;
+        } else {
+            postHf = _healthFactor(target, _debtValueWad(target));
+        }
+        require(m.asset.transferFrom(msg.sender, address(this), coverAmount), "transfer failed");
+        if (_collaterals[collId].token == ETH) {
+            _safeSendEth(payable(msg.sender), seizeAmount);
+        } else {
+            require(IERC20(_collaterals[collId].token).transfer(msg.sender, seizeAmount), "transfer failed");
+        }
+    }
+
+    function _handleBadDebtCore(uint8 marketId, address target) internal {
+        _accrueMarket(marketId);
+        Market storage m = _market(marketId);
+        address token = address(m.asset);
+        uint8 t = userTier[target][marketId];
+        require(t > 0, "no debt");
+        for (uint256 i = 0; i < _collaterals.length; i++) {
+            require(userCollateral[target][i] == 0, "collateral exists");
+        }
+        uint256 badDebtAmount = (userBorrowNorm[target][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
+        uint256 reserveBalance = IERC20(token).balanceOf(address(reserveManager));
+        uint256 coveredByReserve = badDebtAmount > reserveBalance ? reserveBalance : badDebtAmount;
+        uint256 lossToDepositors = badDebtAmount - coveredByReserve;
+
+        uint256 oldSupplyIndex = m.supplyIndex;
+        uint256 newSupplyIndex = oldSupplyIndex;
+        uint256 remaining = lossToDepositors;
+        if (remaining > 0) {
+            uint256 supplyBefore = _totalSupplyToken(marketId);
+            if (supplyBefore > 0) {
+                uint256 absorbed = remaining >= supplyBefore ? supplyBefore : remaining;
+                newSupplyIndex =
+                    absorbed >= supplyBefore ? 0 : oldSupplyIndex * (supplyBefore - absorbed) / supplyBefore;
+                m.supplyIndex = newSupplyIndex;
+                remaining -= absorbed;
+            }
+            if (remaining > 0 && m.totalReserve > 0) {
+                uint256 absorbed = remaining >= m.totalReserve ? m.totalReserve : remaining;
+                m.totalReserve -= absorbed;
+                remaining -= absorbed;
+            }
+            if (remaining > 0 && m.treasuryAccrued > 0) {
+                uint256 absorbed = remaining >= m.treasuryAccrued ? m.treasuryAccrued : remaining;
+                m.treasuryAccrued -= absorbed;
+                remaining -= absorbed;
+            }
+        }
+
+        m.totalNormalizedByTier[t] -= userBorrowNorm[target][marketId];
+        userBorrowNorm[target][marketId] = 0;
+        userTier[target][marketId] = 0;
+        userGlobalTier[target] = 0;
+
+        if (coveredByReserve > 0) {
+            m.cash += coveredByReserve;
+            reserveManager.coverBadDebt(token, coveredByReserve);
+        }
+        emit BadDebtRealized(target, badDebtAmount, coveredByReserve, lossToDepositors, oldSupplyIndex, newSupplyIndex);
+    }
+
+    function _skimReserveCore(uint8 marketId) internal returns (uint256 amount) {
+        _accrueMarket(marketId);
+        Market storage m = _market(marketId);
+        amount = m.totalReserve > m.cash ? m.cash : m.totalReserve;
+        require(amount > 0, "no reserve");
+        m.totalReserve -= amount;
+        m.cash -= amount;
+        require(m.asset.transfer(address(reserveManager), amount), "transfer failed");
+    }
+
+    function _collectTreasuryCore(uint8 marketId) internal returns (uint256 amount, address to) {
+        require(treasuryAddress != address(0), "treasury not set");
+        Market storage m = _market(marketId);
+        amount = m.treasuryAccrued;
+        require(amount > 0, "no treasury");
+        require(m.cash >= amount, "insufficient liquidity");
+        m.treasuryAccrued = 0;
+        m.cash -= amount;
+        to = treasuryAddress;
+        require(m.asset.transfer(to, amount), "transfer failed");
+    }
+
+    // ==================== Accrual ====================
+
+    function _accrueAll() internal {
+        for (uint8 i = 0; i < _markets.length; i++) {
+            _accrueMarket(i);
+        }
+    }
+
+    function _accrueMarket(uint8 marketId) internal {
+        Market storage m = _market(marketId);
+        if (m.enabled == 0) return;
         uint256 currentTimestamp = block.timestamp;
-        if (currentTimestamp == lastAccrual) return;
-        uint256 dt = currentTimestamp - lastAccrual;
-        uint256 utilization = getUtilization();
+        if (currentTimestamp == m.lastAccrual) return;
+        uint256 dt = currentTimestamp - m.lastAccrual;
+        uint256 utilization = _utilization(marketId);
         uint256 totalInterest = 0;
         for (uint256 t = 1; t <= MAX_TIERS; t++) {
-            uint256 totalNorm = totalNormalizedByTier[t];
+            uint256 totalNorm = m.totalNormalizedByTier[t];
             if (totalNorm == 0) continue;
             uint256 rate = interestRateModel.getBorrowRatePerSecond(utilization, t);
-            uint256 index = borrowIndexByTier[t];
+            uint256 index = m.borrowIndexByTier[t];
             uint256 interest = totalNorm * index * rate * dt / (WAD * WAD);
-            borrowIndexByTier[t] = index + index * rate * dt / WAD;
+            m.borrowIndexByTier[t] = index + index * rate * dt / WAD;
             totalInterest += interest;
         }
         if (totalInterest == 0) {
-            lastAccrual = currentTimestamp;
+            m.lastAccrual = currentTimestamp;
             return;
         }
-        // 固定比例分配：储备 4%、Treasury 2%、存款人 94%（余额为精确余数，保证资金守恒）
         uint256 reserveShare = totalInterest * reserveFactor / WAD;
         uint256 treasuryShare = totalInterest * treasuryFactor / WAD;
         uint256 suppliersShare = totalInterest - reserveShare - treasuryShare;
-        if (totalShares > 0) {
-            supplyIndex += suppliersShare * WAD / totalShares;
-            totalReserve += reserveShare;
-            treasuryAccrued += treasuryShare;
+        if (m.totalShares > 0) {
+            m.supplyIndex += suppliersShare * WAD / m.totalShares;
+            m.totalReserve += reserveShare;
+            m.treasuryAccrued += treasuryShare;
         } else {
-            totalReserve += totalInterest;
+            m.totalReserve += totalInterest;
         }
-        // 储备溢出自动转 Treasury：储备总资产（账面 + 物理）超过目标时，超额部分转 Treasury
-        _overflowReserveToTreasury();
-        lastAccrual = currentTimestamp;
+        _overflowReserveToTreasury(marketId);
+        m.lastAccrual = currentTimestamp;
         emit InterestAccrued(totalInterest, dt);
     }
 
-    /// @notice 储备目标 = totalBorrows × reserveTargetRatio；储备总资产（账面 totalReserve + 物理
-    ///         ReserveManager 余额）超过目标的部分，从账面储备转入 Treasury，储备固定在目标值。
-    function _overflowReserveToTreasury() internal {
-        uint256 totalBorrows = getTotalBorrows();
+    function _overflowReserveToTreasury(uint8 marketId) internal {
+        Market storage m = _market(marketId);
+        uint256 totalBorrows = _totalBorrowsToken(marketId);
         if (totalBorrows == 0) return;
         uint256 reserveTarget = totalBorrows * reserveTargetRatio / WAD;
-        uint256 reserveAssets = totalReserve + usdc.balanceOf(address(reserveManager));
+        uint256 reserveAssets = m.totalReserve + IERC20(address(m.asset)).balanceOf(address(reserveManager));
         if (reserveAssets <= reserveTarget) return;
         uint256 overflow = reserveAssets - reserveTarget;
-        uint256 transferable = overflow > totalReserve ? totalReserve : overflow;
+        uint256 transferable = overflow > m.totalReserve ? m.totalReserve : overflow;
         if (transferable == 0) return;
-        totalReserve -= transferable;
-        treasuryAccrued += transferable;
+        m.totalReserve -= transferable;
+        m.treasuryAccrued += transferable;
         emit ReserveOverflowTransferred(transferable);
     }
 
-    function _getDebt6(UserPosition storage pos) internal view returns (uint256) {
-        if (pos.borrowNorm == 0) return 0;
-        return (pos.borrowNorm * borrowIndexByTier[pos.tier] + WAD - 1) / WAD;
+    // ==================== Value / risk internals ====================
+
+    function _debtValueWad(address user) internal view returns (uint256) {
+        uint256 total = 0;
+        for (uint8 i = 0; i < _markets.length; i++) {
+            Market storage m = _markets[i];
+            uint8 t = userTier[user][i];
+            if (t == 0) continue;
+            uint256 debtToken = (userBorrowNorm[user][i] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
+            total += _amountToWadUsd(debtToken, m.wadScale, _priceOf(address(m.asset)));
+        }
+        return total;
     }
 
-    function _getDebtWad(UserPosition storage pos) internal view returns (uint256) {
-        if (pos.borrowNorm == 0) return 0;
-        // 债务美元价值 = USDC 数量 × USDC/USD 价格（支持 USDC 溢价/脱锚）
-        return _toWadUsd(_getDebt6(pos));
+    function _collateralValueWad(address user) internal view returns (uint256) {
+        uint256 total = 0;
+        for (uint256 i = 0; i < _collaterals.length; i++) {
+            uint256 amt = userCollateral[user][i];
+            if (amt == 0) continue;
+            total += _amountToWadUsd(amt, _collaterals[i].wadScale, _priceOf(_collaterals[i].token));
+        }
+        return total;
     }
 
-    /// @notice USDC/USD 价格（8 位小数）。必须 > 0。
-    function _usdcPrice() internal view returns (uint256) {
-        uint256 p = priceOracle.getAssetPrice(address(usdc));
-        require(p > 0, "bad usdc price");
-        return p;
+    function _collateralPower(address user, uint256 tier) internal view returns (uint256) {
+        uint256 total = 0;
+        for (uint256 i = 0; i < _collaterals.length; i++) {
+            uint256 amt = userCollateral[user][i];
+            if (amt == 0) continue;
+            uint256 value = _amountToWadUsd(amt, _collaterals[i].wadScale, _priceOf(_collaterals[i].token));
+            total += value * riskManager.getMaxLTV(_collaterals[i].token, tier) / WAD;
+        }
+        return total;
     }
 
-    /// @notice 任一关键资产价格被标记异常（偏差超阈值）→ 暂停新增借款/新增抵押。
-    function _oracleAnomalous() internal view returns (bool) {
-        return priceOracle.isPriceAnomalous(ETH) || priceOracle.isPriceAnomalous(address(usdc));
+    /// @notice HF = Σ(抵押品价值×LT(collateral, tier)) / 债务（USD WAD）。
+    function _healthFactor(address user, uint256 debtWad) internal view returns (uint256) {
+        if (debtWad == 0) return type(uint256).max;
+        uint8 tier = userGlobalTier[user];
+        if (tier == 0) return type(uint256).max;
+        uint256 weighted = 0;
+        for (uint256 i = 0; i < _collaterals.length; i++) {
+            uint256 amt = userCollateral[user][i];
+            if (amt == 0) continue;
+            uint256 value = _amountToWadUsd(amt, _collaterals[i].wadScale, _priceOf(_collaterals[i].token));
+            weighted += value * riskManager.getLiquidationThreshold(_collaterals[i].token, tier) / WAD;
+        }
+        return weighted * WAD / debtWad;
     }
 
-    /// @notice USDC 数量(6位) → 美元 WAD = amount × price / 1e8 × 1e12（向上取整）。
-    function _toWadUsd(uint256 usdc6) internal view returns (uint256) {
-        return (usdc6 * _usdcPrice() * USDC_SCALE + PRICE_SCALE - 1) / PRICE_SCALE;
+    function _anyBorrow(address user) internal view returns (bool) {
+        for (uint8 i = 0; i < _markets.length; i++) {
+            if (userBorrowNorm[user][i] > 0) return true;
+        }
+        return false;
     }
 
-    /// @notice 美元 WAD → USDC 数量(6位) = wad × 1e8 / (price × 1e12)（向下取整）。
-    function _toUsdc6(uint256 wadUsd) internal view returns (uint256) {
-        return wadUsd * PRICE_SCALE / (_usdcPrice() * USDC_SCALE);
+    function _utilization(uint8 marketId) internal view returns (uint256) {
+        Market storage m = _market(marketId);
+        uint256 borrows = _totalBorrowsToken(marketId);
+        uint256 total = m.cash + borrows;
+        if (total == 0) return 0;
+        return borrows * WAD / total;
     }
 
-    function _getCollateralValueWad(UserPosition storage pos) internal view returns (uint256) {
-        return pos.collateral * priceOracle.getAssetPrice(ETH) / PRICE_SCALE;
+    function _totalSupplyToken(uint8 marketId) internal view returns (uint256) {
+        Market storage m = _market(marketId);
+        return m.totalShares * m.supplyIndex / WAD;
     }
 
-    function _getAverageBorrowRate() internal view returns (uint256) {
+    function _totalBorrowsToken(uint8 marketId) internal view returns (uint256) {
+        Market storage m = _market(marketId);
+        uint256 total = 0;
+        for (uint256 t = 1; t <= MAX_TIERS; t++) {
+            total += m.totalNormalizedByTier[t] * m.borrowIndexByTier[t] / WAD;
+        }
+        return total;
+    }
+
+    function _getBorrowAPR(uint8 marketId, uint256 tier) internal view returns (uint256) {
+        return interestRateModel.getBorrowRatePerSecond(_utilization(marketId), tier) * SECONDS_PER_YEAR;
+    }
+
+    function _getSupplyAPR(uint8 marketId) internal view returns (uint256) {
+        Market storage m = _market(marketId);
         uint256 totalBorrows = 0;
         uint256 weighted = 0;
-        uint256 utilization = getUtilization();
+        uint256 utilization = _utilization(marketId);
         for (uint256 t = 1; t <= MAX_TIERS; t++) {
-            uint256 norm = totalNormalizedByTier[t];
+            uint256 norm = m.totalNormalizedByTier[t];
             if (norm == 0) continue;
-            uint256 borrows = norm * borrowIndexByTier[t] / WAD;
+            uint256 borrows = norm * m.borrowIndexByTier[t] / WAD;
             totalBorrows += borrows;
             weighted += borrows * interestRateModel.getBorrowRatePerSecond(utilization, t);
         }
-        if (totalBorrows == 0) return 0;
-        return weighted / totalBorrows;
+        uint256 avgRate = totalBorrows == 0 ? 0 : weighted / totalBorrows;
+        uint256 totalFee = reserveFactor + treasuryFactor;
+        return avgRate * utilization * (WAD - totalFee) / WAD / WAD * SECONDS_PER_YEAR;
+    }
+
+    function _oracleAnomalous() internal view returns (bool) {
+        for (uint256 i = 0; i < _markets.length; i++) {
+            if (priceOracle.isPriceAnomalous(address(_markets[i].asset))) return true;
+        }
+        for (uint256 i = 0; i < _collaterals.length; i++) {
+            if (priceOracle.isPriceAnomalous(_collaterals[i].token)) return true;
+        }
+        return false;
+    }
+
+    function _priceOf(address token) internal view returns (uint256) {
+        uint256 p = priceOracle.getAssetPrice(token);
+        require(p > 0, "bad price");
+        return p;
+    }
+
+    function _minSupply(Market storage m) internal view returns (uint256) {
+        return MIN_SUPPLY_BASE * WAD / m.wadScale;
+    }
+
+    function _minBorrow(Market storage m) internal view returns (uint256) {
+        return MIN_BORROW_BASE * WAD / m.wadScale;
+    }
+
+    function _minCollateral(uint8 collId) internal view returns (uint256) {
+        return MIN_COLLATERAL_UNITS / _collaterals[collId].wadScale;
+    }
+
+    function _market(uint8 marketId) internal view returns (Market storage) {
+        require(marketId < _markets.length, "bad market");
+        return _markets[marketId];
+    }
+
+    function _requireCollateral(address token) internal view returns (uint8) {
+        uint256 idx = _collateralIndex[token];
+        require(idx > 0, "not collateral");
+        return uint8(idx - 1);
+    }
+
+    function _amountToWadUsd(uint256 amount, uint256 wadScale, uint256 price) internal pure returns (uint256) {
+        return amount * price * wadScale / PRICE_SCALE;
+    }
+
+    function _wadToAmount(uint256 wadUsd, uint256 wadScale, uint256 price) internal pure returns (uint256) {
+        return wadUsd * PRICE_SCALE / (price * wadScale);
     }
 
     function _mulDivUp(uint256 a, uint256 b, uint256 c) internal pure returns (uint256) {
         return (a * b + c - 1) / c;
     }
 
-    /// @notice 用 call 发送 ETH（不受 2300 gas 限制），失败即 revert。重入由 ReentrancyGuard 拦截。
+    function _pow10(uint256 n) internal pure returns (uint256) {
+        uint256 r = 1;
+        for (uint256 i = 0; i < n; i++) {
+            r *= 10;
+        }
+        return r;
+    }
+
     function _safeSendEth(address payable to, uint256 amount) internal {
         (bool ok,) = to.call{value: amount}("");
         require(ok, "eth transfer failed");

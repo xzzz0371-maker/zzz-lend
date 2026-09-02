@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {MockUSDC} from "../src/mocks/MockUSDC.sol";
+import {MockToken} from "../src/mocks/MockToken.sol";
 import {MockAggregatorV3} from "../src/mocks/MockAggregatorV3.sol";
 import {MockPriceOracle} from "../src/mocks/MockPriceOracle.sol";
 import {ChainlinkOracle, IAggregatorV3} from "../src/oracle/ChainlinkOracle.sol";
@@ -14,12 +15,14 @@ import {ReserveManager} from "../src/ReserveManager.sol";
 import {RiskEngine} from "../src/risk/RiskEngine.sol";
 import {LendingPool} from "../src/LendingPool.sol";
 
-/// @title ZZZ Lend Sepolia
+/// @title ZZZ Lend Sepolia V2 (multi-asset)
 /// @dev
 ///   forge script script/Deploy.s.sol:Deploy --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv
 ///          SEPOLIA_RPC_URL / PRIVATE_KEY / ETHERSCAN_API_KEY /
 ///                 SEPOLIA_ETH_USD_FEED / SEPOLIA_USDC_USD_FEED / [TESTNET_ADMIN]
 ///          ./deployments/sepolia.json
+///  V2：注册 USDT/DAI 借贷市场与 wstETH/WBTC 抵押品，并按保守/锚定档位配置 RiskManager；
+///  ETH/USDC 使用真实 Chainlink feed，其余资产使用 MockAggregator（Sepolia 无对应官方 feed）。
 contract Deploy is Script {
     address internal constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
@@ -27,17 +30,14 @@ contract Deploy is Script {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
         address testnetAdmin = vm.envOr("TESTNET_ADMIN", deployer);
-        // 本地验证开关：MOCK_FEEDS=1 时部署并启用模拟聚合器（不用真实 Chainlink）
         bool mockFeeds = vm.envOr("MOCK_FEEDS", false);
         address ethUsdFeed = vm.envAddress("SEPOLIA_ETH_USD_FEED");
         address usdcUsdFeed = vm.envAddress("SEPOLIA_USDC_USD_FEED");
 
         vm.startBroadcast(deployerKey);
 
-        // 1. MockUSDC (6 decimals, testnet only)
         MockUSDC usdc = new MockUSDC();
 
-        // 1b. Optional: local mock aggregators (price 3000 / 1.00 USD)
         if (mockFeeds) {
             MockAggregatorV3 ethAgg = new MockAggregatorV3();
             ethAgg.setData(3000e8, block.timestamp, 8);
@@ -47,7 +47,6 @@ contract Deploy is Script {
             usdcUsdFeed = address(usdcAgg);
         }
 
-        // 2. ChainlinkOracle + MockPriceOracle (liquidation demo fallback)
         ChainlinkOracle oracle = new ChainlinkOracle();
         oracle.setFeed(ETH, IAggregatorV3(ethUsdFeed), 8);
         oracle.setFeed(address(usdc), IAggregatorV3(usdcUsdFeed), 8);
@@ -55,63 +54,82 @@ contract Deploy is Script {
         oracle.grantRole(oracle.PAUSER_ROLE(), testnetAdmin);
         MockPriceOracle mockOracle = new MockPriceOracle();
 
-        // 2b. SwitchableOracle：池子默认走真实 Chainlink；PAUSER 可切换到管理员可设价模式做清算演示
         SwitchableOracle switchable = new SwitchableOracle(oracle);
         switchable.grantRole(switchable.PARAM_ADMIN_ROLE(), testnetAdmin);
         switchable.grantRole(switchable.PAUSER_ROLE(), testnetAdmin);
 
-        // 3. InterestRateModel NORMAL
         InterestRateModel irm = new InterestRateModel();
         irm.applyPreset(InterestRateModel.MarketPreset.NORMAL);
         irm.setMarketGovernor(testnetAdmin);
         irm.transferOwnership(testnetAdmin);
 
-        // 4. RiskManager    LTV
         RiskManager rm = new RiskManager();
-        rm.transferOwnership(testnetAdmin);
-
-        // 5. LiquidationManager
         LiquidationManager lm = new LiquidationManager();
-
-        // 6. ReserveManager
         ReserveManager rsv = new ReserveManager(address(usdc));
 
-        // 7. LendingPool（价格源 = SwitchableOracle）
         LendingPool pool = new LendingPool(usdc, switchable, irm, rm, lm, rsv);
 
-        // 8. RiskEngine（构造需池地址，故在池之后部署）
+        // ===== V2：额外资产与市场注册 =====
+        MockToken usdt = new MockToken("Mock Tether USD", "USDT", 6);
+        MockToken dai = new MockToken("Mock Dai Stablecoin", "DAI", 18);
+        MockToken wsteth = new MockToken("Mock Wrapped Staked ETH", "wstETH", 18);
+        MockToken wbtc = new MockToken("Mock Wrapped Bitcoin", "WBTC", 8);
+
+        // 借贷市场：USDT(6) / DAI(18)
+        pool.addMarket(address(usdt), 6);
+        pool.addMarket(address(dai), 18);
+        // 抵押品：wstETH(18, 与 ETH 同档) / WBTC(8, 保守档)
+        pool.addCollateral(address(wsteth), 18);
+        pool.addCollateral(address(wbtc), 8);
+
+        _setRiskTiers(rm, address(wsteth), false); // 与 ETH 相同：50/60/70/75/80
+        _setRiskTiers(rm, address(wbtc), true); // 保守：45/55/65/70/75
+
+        // 其余资产无真实 Sepolia feed → 注册 MockAggregator feed，主源可直接读价
+        address[4] memory extraAssets = [address(usdt), address(dai), address(wsteth), address(wbtc)];
+        uint256[4] memory extraPrices = [uint256(1e8), 1e8, 3000e8, 100_000e8];
+        for (uint256 i = 0; i < extraAssets.length; i++) {
+            MockAggregatorV3 agg = new MockAggregatorV3();
+            agg.setData(int256(extraPrices[i]), block.timestamp, 8);
+            oracle.setFeed(extraAssets[i], IAggregatorV3(address(agg)), 8);
+        }
+
+        // ===== RiskEngine / init / roles =====
         RiskEngine re = new RiskEngine(address(oracle), address(pool));
         re.grantRole(re.PARAM_ADMIN_ROLE(), testnetAdmin);
 
-        // 9. init
         rsv.setLendingPool(address(pool));
         pool.grantRole(pool.PARAM_ADMIN_ROLE(), testnetAdmin);
         pool.grantRole(pool.PAUSER_ROLE(), testnetAdmin);
         rsv.transferOwnership(testnetAdmin);
+        rm.transferOwnership(testnetAdmin);
 
         vm.stopBroadcast();
 
-        //
-        console2.log("=== ZZZ Lend Sepolia      ===");
-        console2.log("Deployer:       ", deployer);
-        console2.log("TestnetAdmin:   ", testnetAdmin);
-        console2.log("MockUSDC:       ", address(usdc));
+        console2.log("=== ZZZ Lend Sepolia V2 ===");
+        console2.log("Deployer:      ", deployer);
+        console2.log("TestnetAdmin:  ", testnetAdmin);
+        console2.log("MockUSDC:      ", address(usdc));
+        console2.log("USDT:          ", address(usdt));
+        console2.log("DAI:           ", address(dai));
+        console2.log("wstETH:        ", address(wsteth));
+        console2.log("WBTC:          ", address(wbtc));
         console2.log("ChainlinkOracle:", address(oracle));
         console2.log("SwitchableOracle:", address(switchable));
-        console2.log("MockPriceOracle:", address(mockOracle));
         console2.log("InterestRateModel:", address(irm));
-        console2.log("RiskManager:    ", address(rm));
+        console2.log("RiskManager:   ", address(rm));
         console2.log("LiquidationManager:", address(lm));
-        console2.log("ReserveManager: ", address(rsv));
-        console2.log("RiskEngine:     ", address(re));
-        console2.log("LendingPool:    ", address(pool));
-        console2.log("ETH/USD Feed:   ", ethUsdFeed);
-        console2.log("USDC/USD Feed:  ", usdcUsdFeed);
+        console2.log("ReserveManager:", address(rsv));
+        console2.log("RiskEngine:    ", address(re));
+        console2.log("LendingPool:   ", address(pool));
 
-        //    deployments/sepolia.json   E2E/
         string memory obj;
         obj = vm.serializeUint("root", "chainId", block.chainid);
         obj = vm.serializeAddress("root", "usdc", address(usdc));
+        obj = vm.serializeAddress("root", "usdt", address(usdt));
+        obj = vm.serializeAddress("root", "dai", address(dai));
+        obj = vm.serializeAddress("root", "wsteth", address(wsteth));
+        obj = vm.serializeAddress("root", "wbtc", address(wbtc));
         obj = vm.serializeAddress("root", "oracle", address(oracle));
         obj = vm.serializeAddress("root", "switchableOracle", address(switchable));
         obj = vm.serializeAddress("root", "mockOracle", address(mockOracle));
@@ -125,13 +143,21 @@ contract Deploy is Script {
         obj = vm.serializeString("root", "ethUsdFeed", vm.toString(ethUsdFeed));
         obj = vm.serializeString("root", "usdcUsdFeed", vm.toString(usdcUsdFeed));
         vm.writeJson(obj, "./deployments/sepolia.json");
+    }
 
-        console2.log("");
-        console2.log("===     ===");
-        console2.log("1) verify: script/Verify.s.sol   see docs/ZZZ_Lend master doc");
-        console2.log(
-            "2) e2e: forge script script/TestnetE2E.s.sol:TestnetE2E --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv"
-        );
-        console2.log("3) cast manual: see docs/ZZZ_Lend master doc section 6");
+    function _setRiskTiers(RiskManager rm, address token, bool conservative) internal {
+        if (conservative) {
+            uint256[5] memory ltv = [uint256(45e16), 55e16, 65e16, 7e17, 75e16];
+            uint256[5] memory lt = [uint256(55e16), 65e16, 75e16, 8e17, 85e16];
+            for (uint256 i = 0; i < 5; i++) {
+                rm.setTier(token, i + 1, ltv[i], lt[i]);
+            }
+        } else {
+            uint256[5] memory ltv = [uint256(5e17), 6e17, 7e17, 75e16, 8e17];
+            uint256[5] memory lt = [uint256(6e17), 7e17, 78e16, 85e16, 9e17];
+            for (uint256 i = 0; i < 5; i++) {
+                rm.setTier(token, i + 1, ltv[i], lt[i]);
+            }
+        }
     }
 }

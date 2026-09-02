@@ -78,7 +78,7 @@ contract UsdcPegTest is BaseSetup {
         _supplyCollateral(alice, 1 ether);
         _borrow(alice, 500e6, 1);
         oracle.setPrice(address(usdc), 0);
-        vm.expectRevert(bytes("bad usdc price"));
+        vm.expectRevert(bytes("bad price"));
         pool.getUserHealthFactor(alice);
     }
 }
