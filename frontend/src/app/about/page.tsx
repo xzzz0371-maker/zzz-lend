@@ -33,9 +33,10 @@ export default function AboutPage() {
           higher estimated yields — and higher risk.
         </p>
         <p className="mt-3 text-sm leading-relaxed text-slate-600">
-          Bad debt beyond the risk reserve is shared by all depositors proportionally, similar to a
-          fund whose NAV can decline. The risk reserve targets approximately 3% of total borrows;
-          excess reserve is automatically diverted to the treasury.
+          The protocol maintains a Risk Reserve at a prudent safety level (approximately 3% of
+          total borrows) to safeguard depositors against bad debt. If bad debt ever exceeds the
+          reserve, losses are shared proportionally by all depositors, similar to a fund whose NAV
+          can decline.
         </p>
       </section>
 
@@ -70,7 +71,9 @@ export default function AboutPage() {
       <section className="card p-5">
         <h2 className="mb-4 font-display text-lg font-bold text-slate-800">Revenue Distribution</h2>
         <p className="mb-3 text-sm text-slate-600">
-          Borrow interest is distributed as follows:
+          94% of borrower interest is passed directly to depositors — among the most competitive
+          rates in DeFi. The remaining fees fund the Risk Reserve and the Treasury (used for
+          security audits, development, and bug bounties).
         </p>
         <div className="space-y-2">
           <DistributionRow label="Depositors" pct={94} color="#10b981" />
@@ -78,33 +81,25 @@ export default function AboutPage() {
           <DistributionRow label="Treasury" pct={2} color="#8b5cf6" />
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          The Risk Reserve is capped at approximately 3% of total borrows — reserve above the target
-          automatically flows to the Treasury.
+          The protocol maintains a Risk Reserve at a prudent safety level (approximately 3% of
+          total borrows) to safeguard depositors against bad debt. Once the reserve reaches its
+          safety target, ongoing protocol fees are directed to the Treasury to fund security audits,
+          protocol development, and long-term operational resilience — not to any individual.
         </p>
       </section>
 
       {/* Risk disclosure */}
       <section className="card p-5">
         <h2 className="mb-3 font-display text-lg font-bold text-slate-800">Risk Disclosure</h2>
-        <ul className="list-disc space-y-2 pl-5 text-sm text-slate-600">
-          <li>
-            ZZZ Lend maintains a <strong className="text-slate-800">Risk Reserve equal to
-            approximately 3% of total borrows</strong>.
-          </li>
-          <li>
-            <strong className="text-slate-800">Bad debts are first absorbed by this reserve.</strong>
-          </li>
-          <li>
-            If bad debts exceed the reserve, losses are{" "}
-            <strong className="text-slate-800">
-              proportionally shared by all depositors
-            </strong>{" "}
-            (through a reduction in the supply index).
-          </li>
-          <li>
-            <strong className="text-slate-800">Deposits are NOT guaranteed.</strong> Principal may
-            decrease due to bad debt.
-          </li>
+        <p className="text-sm leading-relaxed text-slate-600">
+          ZZZ Lend is a decentralized lending protocol. Depositors earn a variable share of borrower
+          interest; rates are not fixed and may change with market conditions. The protocol
+          maintains a Risk Reserve (~3% of borrows) to absorb bad debt; in the event bad debt
+          exceeds the reserve, losses are proportionally shared by all depositors. Deposits are not
+          principal-guaranteed. Neither ZZZ Lend nor any party guarantees returns. Always assess
+          your own risk tolerance before participating.
+        </p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
           <li>
             <strong className="text-slate-800">Oracle risk:</strong> prices come from Chainlink with
             staleness and deviation checks, but feeds can lag or be paused.

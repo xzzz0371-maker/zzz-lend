@@ -12,8 +12,9 @@ export function Footer() {
             <span className="font-display text-sm font-bold text-slate-800">ZZZ Lend</span>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            Risk-layered DeFi lending on Sepolia. Deposits are not guaranteed — your principal may
-            decrease due to bad debt, like a fund whose NAV can decline.
+            Risk-layered DeFi lending on Sepolia. Transparent mechanics: 94% of borrower interest
+            is passed directly to depositors. Deposits are not guaranteed — principal may decrease
+            due to bad debt, like a fund whose NAV can decline.
           </p>
         </div>
         <div>
@@ -44,7 +45,9 @@ export function Footer() {
             <li>Audit: Security review completed, pending third-party audit</li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">
-            All APY figures are estimates. No returns are guaranteed.
+            All displayed APY/APR figures are projections based on current market data. Nothing on
+            this site constitutes financial advice. Cryptographic assets involve risk; only
+            participate with funds you can afford to lose.
           </p>
         </div>
       </div>

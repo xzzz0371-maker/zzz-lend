@@ -108,6 +108,10 @@ export default function HomePage() {
               <div className="mt-1 text-xs text-slate-500">
                 7D Avg (est.) ~{supply7d.toFixed(2)}% — not historical data
               </div>
+              <div className="mt-1 text-xs text-slate-500">
+                Projected APY based on current market conditions. Rates are variable and may change
+                at any time.
+              </div>
             </div>
           </div>
         )}
@@ -124,7 +128,7 @@ export default function HomePage() {
         <div className="card card-hover p-6">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="font-display text-lg font-bold text-slate-800">Interest Rate Model</h2>
-            <span className="text-xs text-slate-500">Estimated · NORMAL preset</span>
+            <span className="text-xs text-slate-500">Projected · NORMAL preset</span>
           </div>
           <RateCurve />
         </div>
@@ -155,8 +159,9 @@ export default function HomePage() {
       <section>
         <h2 className="mb-1 font-display text-xl font-bold text-slate-800">Choose Your Risk</h2>
         <p className="mb-4 text-sm text-slate-500">
-          Pick a tier. Higher LTV means higher borrowing power, higher estimated yield — and higher
-          risk.
+          Pick a tier. Higher LTV tiers offer greater capital efficiency but carry higher
+          liquidation risk and higher interest rates. Select a tier aligned with your risk
+          tolerance.
         </p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {TIERS.map((t) => (
@@ -176,10 +181,12 @@ export default function HomePage() {
       {/* Risk notice */}
       <section className="card border-red-200/70 p-5" style={{ borderColor: "rgba(239,68,68,0.25)" }}>
         <p className="text-sm text-red-700">
-          <strong>Risk notice:</strong> Deposits are not guaranteed. Your principal may decrease due
-          to bad debt, similar to a fund whose NAV can decline. All APY figures are estimates and
-          may change with market conditions. Borrowing involves liquidation risk — if your Health
-          Factor drops below 1, your collateral may be liquidated.
+          <strong>Risk notice:</strong> Deposits are not guaranteed — your principal may decrease
+          due to bad debt, similar to a fund whose NAV can decline. ZZZ Lend is transparent and
+          non-custodial: 94% of borrower interest is passed directly to depositors, and all
+          displayed APY/APR figures are projections based on current market conditions, not
+          guarantees. Borrowing involves liquidation risk — monitor your Health Factor and keep it
+          above 1.0.
         </p>
       </section>
     </div>

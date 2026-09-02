@@ -182,7 +182,9 @@ export default function StressTestPage() {
           </table>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Simulation only. Health Factor &lt; 1 means liquidation may occur.
+          Simulation results are for illustrative purposes only. They are based on current on-chain
+          data and assumptions, and do not predict or guarantee actual outcomes. A Health Factor
+          below 1.0 means your position may be liquidated.
         </p>
       </div>
 

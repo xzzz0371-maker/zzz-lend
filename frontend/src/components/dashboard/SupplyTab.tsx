@@ -40,7 +40,10 @@ export function SupplyTab() {
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
-        Deposits are not guaranteed. Your principal may decrease due to bad debt.
+        ZZZ Lend is a transparent, non-custodial lending protocol. Depositors earn a share of
+        borrower interest, with 94% of interest passed back to depositors. Rates are variable and
+        deposits are not principal-guaranteed. Please read the full Risk Disclosure before
+        depositing.
       </div>
       <div>
         <label className="label">Amount (USDC)</label>

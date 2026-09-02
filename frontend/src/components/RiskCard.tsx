@@ -62,7 +62,7 @@ export function RiskCard({
           </div>
         )}
       </div>
-      <div className="text-[11px] text-slate-500">Estimated, not guaranteed</div>
+      <div className="text-[11px] text-slate-500">Projected, not guaranteed</div>
     </Link>
   );
 }

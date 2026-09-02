@@ -58,8 +58,9 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
-        Borrowing involves liquidation risk. If Health Factor drops below 1, your collateral may be
-        liquidated.
+        Positions with Health Factor below 1.0 may be liquidated by third parties. Liquidation is a
+        core mechanism that protects the protocol and all depositors. Monitor your position health
+        regularly.
       </div>
 
       {/* Tier selector */}
@@ -81,7 +82,9 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
           ))}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          {cfg.label} · Liquidation threshold {cfg.lt}% · Estimated, not guaranteed
+          {cfg.label} · Liquidation threshold {cfg.lt}% · Higher LTV = greater capital efficiency,
+          but higher liquidation risk and higher interest rates. Select a tier aligned with your
+          risk tolerance.
         </p>
       </div>
 
@@ -106,8 +109,9 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
       </div>
 
       <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700 ring-1 ring-sky-200">
-        Interest rates are variable and change with pool utilization. Your actual interest cost may
-        differ from the rate shown at borrow time.
+        Interest rates are variable and adjust in real time with pool utilization. Your actual
+        borrowing cost may differ from the rate shown at the time of borrowing. Choose your risk
+        tier carefully.
       </div>
 
       <div className="space-y-1 text-sm">
