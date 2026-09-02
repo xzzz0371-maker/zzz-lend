@@ -10,7 +10,7 @@ contract LiquidationTest is BaseSetup {
         _borrow(alice, 1000e6, 5); // LTV 33%
         vm.prank(liquidator);
         vm.expectRevert(bytes("not liquidatable"));
-        pool.liquidate(alice, 100e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100e6, 0);
     }
 
     function test_LiquidationAfterPriceDrop() public {
@@ -24,7 +24,7 @@ contract LiquidationTest is BaseSetup {
         uint256 liquidatorEthBefore = liquidator.balance;
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 1000e6, 0); // cover 1000, seize = 1000*1.05/2000 = 0.525 ETH
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0); // cover 1000, seize = 1000*1.05/2000 = 0.525 ETH
 
         uint256 debtAfter = pool.getDebt(alice);
         assertLt(debtAfter, debtBefore);
@@ -48,7 +48,7 @@ contract LiquidationTest is BaseSetup {
         uint256 debtBefore = pool.getDebt(alice);
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 10_000e6, 0); // ask huge; capped to 50%
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0); // ask huge; capped to 50%
         uint256 covered = (debtBefore - pool.getDebt(alice)) / 1e12;
         assertApproxEqAbs(covered, debtBefore / 1e12 / 2, 1e6);
     }
@@ -60,7 +60,7 @@ contract LiquidationTest is BaseSetup {
         oracle.setPrice(ETH, 2000e8);
         vm.prank(alice);
         vm.expectRevert(bytes("self-liquidation"));
-        pool.liquidate(alice, 100e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100e6, 0);
     }
 
     function test_BadDebtCoveredByReserve() public {
@@ -82,7 +82,7 @@ contract LiquidationTest is BaseSetup {
         uint256 poolCashBefore = pool.cash();
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 10_000e6, 0); // drains all collateral, debt remains
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0); // drains all collateral, debt remains
 
         // alice has zero collateral and leftover debt -> bad debt
         (, uint256 collateralAfterLiquidation,,,,,) = pool.getUserPosition(alice);
@@ -101,7 +101,7 @@ contract LiquidationTest is BaseSetup {
         uint256 supplyIndexBefore = pool.supplyIndex();
         uint256 supplyBefore = pool.getTotalSupply();
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         // 储备覆盖 min(储备, 债务)；alice 债务 > 储备 → 储备耗尽
         uint256 covered6 = reserveBalanceBefore - reserveManager.balance();
@@ -131,7 +131,7 @@ contract LiquidationTest is BaseSetup {
         oracle.setPrice(ETH, 2000e8); // still has collateral
         vm.prank(liquidator);
         vm.expectRevert(bytes("collateral exists"));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
     }
 
     function test_LiquidationCannotHappenTwiceOnHealthyPosition() public {
@@ -141,6 +141,6 @@ contract LiquidationTest is BaseSetup {
         oracle.setPrice(ETH, 1500e8); // HF = 1500*0.9/1000 = 1.35 healthy
         vm.prank(liquidator);
         vm.expectRevert(bytes("not liquidatable"));
-        pool.liquidate(alice, 100e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100e6, 0);
     }
 }

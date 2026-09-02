@@ -24,7 +24,7 @@ contract ReentrantEthReceiver {
 
     receive() external payable {
         if (attack && shares > 0) {
-            pool.withdraw(shares);
+            pool.withdraw(0, shares);
         }
     }
 }
@@ -37,7 +37,7 @@ contract EthTransferTest is BaseSetup {
         pool.supplyCollateral{value: 1 ether}();
         uint256 before = address(rec).balance;
         vm.prank(address(rec));
-        pool.withdrawCollateral(0.5 ether);
+        pool.withdrawCollateral(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 0.5 ether);
         assertEq(address(rec).balance, before + 0.5 ether);
         assertEq(pool.getCollateralValue(address(rec)) > 0 ? 1 : 0, 1); // 仍有余抵押
     }
@@ -54,7 +54,7 @@ contract EthTransferTest is BaseSetup {
         vm.prank(address(liq));
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(address(liq));
-        pool.liquidate(alice, 1000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
         assertGt(address(liq).balance, before); // ETH 到账，未因 2300 gas 失败
     }
 
@@ -65,7 +65,7 @@ contract EthTransferTest is BaseSetup {
         vm.prank(address(rec));
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(address(rec));
-        pool.supply(1000e6);
+        pool.supply(0, 1000e6);
         vm.prank(address(rec));
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(address(rec));
@@ -73,6 +73,6 @@ contract EthTransferTest is BaseSetup {
         // 取抵押时 ETH call 触发 receive() 重入 withdraw，被 ReentrancyGuard 拦截 → 外层 revert
         vm.prank(address(rec));
         vm.expectRevert(bytes("eth transfer failed"));
-        pool.withdrawCollateral(0.5 ether);
+        pool.withdrawCollateral(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 0.5 ether);
     }
 }

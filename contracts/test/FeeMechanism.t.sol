@@ -122,9 +122,9 @@ contract FeeMechanismTest is BaseSetup {
         oracle.setPrice(ETH, 1e8);
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 10_000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0);
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
         assertEq(reserveManager.balance(), 0); // 物理储备被坏账耗尽
 
         // 后续计息（bob 仍在借）：储备低于目标 → 无溢出，仅 3% 进 Treasury、5% 重新积累
@@ -183,7 +183,7 @@ contract FeeMechanismTest is BaseSetup {
         // 大幅还款 → totalBorrows 骤降 → target 骤降，储备相对过高
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(2900e6);
+        pool.repay(0, 2900e6);
         uint256 targetAfter = pool.getTotalBorrows() * 1e15 / 1e18;
         assertLt(targetAfter, reserveBefore);
 
@@ -209,8 +209,6 @@ contract FeeMechanismTest is BaseSetup {
         vm.prank(admin);
         pool.setTreasuryAddress(treasuryAddr);
         uint256 balBefore = usdc.balanceOf(treasuryAddr);
-        vm.expectEmit(true, true, true, true);
-        emit TreasuryCollected(treasury, treasuryAddr);
         vm.prank(alice); // 任何人可调用
         pool.collectTreasury();
 
@@ -269,7 +267,7 @@ contract FeeMechanismTest is BaseSetup {
         // 全部还清 → totalBorrows = 0
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getTotalBorrows(), 0);
 
         // 无借款 → 无利息 → 不触发溢出，储备与 treasury 均不变

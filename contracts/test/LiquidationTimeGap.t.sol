@@ -22,12 +22,12 @@ contract LiquidationTimeGapTest is BaseSetup {
                 vm.prank(borrower);
                 pool.supplyCollateral{value: 1 ether}();
                 vm.prank(borrower);
-                pool.borrow(2400e6, 5); // 80% LTV, HF=1.11
+                pool.borrow(0, 2400e6, 5); // 80% LTV, HF=1.11
 
                 // 第一次：ETH 从 3000 跌到 1800 (-40%) → HF=0.675 可清算
                 oracle.setPrice(ETH, 1800e8);
                 vm.prank(liquidator);
-                pool.liquidate(borrower, 2400e6, 0); // cover 50% = 1200
+                pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 2400e6, 0); // cover 50% = 1200
                 uint256 debtAfterFirst = pool.getDebt(borrower);
                 assertLt(debtAfterFirst, 2400e6 * 1e12);
                 assertLt(pool.getUserHealthFactor(borrower), 1e18); // 仍可清算
@@ -45,7 +45,7 @@ contract LiquidationTimeGapTest is BaseSetup {
 
                 // 第二次清算
                 vm.prank(liquidator);
-                pool.liquidate(borrower, 100_000e6, 0);
+                pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100_000e6, 0);
                 (, uint256 collAfter,,,,,) = pool.getUserPosition(borrower);
                 uint256 debtAfterSecond = pool.getDebt(borrower);
                 // 坏账可能扩大：要么恢复健康（HF>=1），要么抵押耗尽残留债务

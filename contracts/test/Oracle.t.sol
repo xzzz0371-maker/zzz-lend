@@ -194,11 +194,11 @@ contract OracleTest is Test {
         vm.prank(supplier);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(100_000e6);
+        pool.supply(0, 100_000e6);
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(borrower);
-        pool.borrow(2000e6, 5); // HF=1.35 @3000
+        pool.borrow(0, 2000e6, 5); // HF=1.35 @3000
 
         // 触发异常：ETH 跌到 2050（偏差 31.7% > 30%）→ 标记异常，HF=0.92 可清算
         oracle.updatePrice(ETH);
@@ -209,7 +209,7 @@ contract OracleTest is Test {
         // borrow / supplyCollateral 被禁止
         vm.prank(borrower);
         vm.expectRevert(bytes("price anomalous"));
-        pool.borrow(100e6, 5);
+        pool.borrow(0, 100e6, 5);
         vm.prank(borrower);
         vm.expectRevert(bytes("price anomalous"));
         pool.supplyCollateral{value: 1 ether}();
@@ -218,13 +218,13 @@ contract OracleTest is Test {
         vm.prank(borrower);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(borrower);
-        pool.repay(100e6);
+        pool.repay(0, 100e6);
         vm.prank(supplier);
-        pool.withdraw(1000e6);
+        pool.withdraw(0, 1000e6);
         vm.prank(liquidator);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(borrower, 1000e6, 0);
+        pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
         assertLt(pool.getDebt(borrower), 2000e6 * 1e12);
     }
 
@@ -251,11 +251,11 @@ contract OracleTest is Test {
         vm.prank(supplier);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(50_000e6);
+        pool.supply(0, 50_000e6);
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(borrower);
-        pool.borrow(1000e6, 1);
+        pool.borrow(0, 1000e6, 1);
         assertGt(pool.getDebt(borrower), 0);
 
         // 无缝切换到 MockPriceOracle

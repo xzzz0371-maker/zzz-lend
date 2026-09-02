@@ -14,7 +14,7 @@ contract RepayTest is BaseSetup {
 
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(2000e6);
+        pool.repay(0, 2000e6);
 
         uint256 debtAfter = pool.getDebt(alice);
         assertApproxEqAbs(debtAfter, debtBefore - 2000e6 * 1e12, 1e12);
@@ -30,12 +30,12 @@ contract RepayTest is BaseSetup {
         for (uint256 i = 0; i < 10; i++) {
             vm.warp(block.timestamp + 3 days);
             vm.prank(alice);
-            pool.repay(100e6);
+            pool.repay(0, 100e6);
         }
         assertGt(pool.getDebt(alice), 0);
 
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getDebt(alice), 0);
         assertEq(pool.getTotalBorrows(), 0);
         _assertInvariant();
@@ -47,7 +47,7 @@ contract RepayTest is BaseSetup {
         _borrow(alice, 2000e6, 1); // 50% LTV
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(1000e6);
+        pool.repay(0, 1000e6);
         // 部分还款后仍锁定原档位
         vm.expectRevert(bytes("tier locked"));
         _borrow(alice, 1000e6, 5);
@@ -59,7 +59,7 @@ contract RepayTest is BaseSetup {
         _borrow(alice, 1000e6, 5);
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(1_000_000e6); // 远超债务
+        pool.repay(0, 1_000_000e6); // 远超债务
         // 只按债务扣减
         assertEq(pool.getDebt(alice), 0);
         _assertInvariant();
@@ -76,7 +76,7 @@ contract RepayTest is BaseSetup {
         uint256 debtBefore = pool.getDebt(alice);
 
         vm.prank(alice);
-        pool.repay(1000e6);
+        pool.repay(0, 1000e6);
         uint256 debtMid = pool.getDebt(alice);
 
         // 再累计 180 天，剩余债务继续计息

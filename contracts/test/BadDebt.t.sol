@@ -29,7 +29,7 @@ contract BadDebtTest is BaseSetup {
         oracle.setPrice(ETH, 1e8); // 抵押价值归零
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 10_000e6, 0); // 清空抵押
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0); // 清空抵押
         (, uint256 collAfter,,,,,) = pool.getUserPosition(alice);
         assertEq(collAfter, 0);
         badDebt6 = pool.getDebt(alice) / 1e12;
@@ -48,7 +48,7 @@ contract BadDebtTest is BaseSetup {
         uint256 cashBefore = pool.cash();
 
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         assertEq(pool.supplyIndex(), supplyIndexBefore); // supplyIndex 不变
         assertEq(pool.getTotalSupply(), supplyBefore); // 存款人不受影响
@@ -73,14 +73,14 @@ contract BadDebtTest is BaseSetup {
         oracle.setPrice(ETH, 1e8);
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 10_000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0);
         uint256 badDebt = pool.getDebt(alice) / 1e12;
         assertGt(badDebt, reserveSeeded); // 坏账 > 储备
 
         uint256 supplyIndexBefore = pool.supplyIndex();
         uint256 supplyBefore = pool.getTotalSupply();
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         assertEq(reserveManager.balance(), 0); // 储备耗尽
         uint256 covered6 = reserveSeeded;
@@ -99,7 +99,7 @@ contract BadDebtTest is BaseSetup {
         uint256 supplyIndexBefore = pool.supplyIndex();
         uint256 supplyBefore = pool.getTotalSupply();
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         assertEq(pool.getDebt(alice), 0);
         assertEq(reserveManager.balance(), 0);
@@ -117,12 +117,12 @@ contract BadDebtTest is BaseSetup {
         vm.prank(carol);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(carol);
-        pool.borrow(2400e6, 5);
+        pool.borrow(0, 2400e6, 5);
 
         oracle.setPrice(ETH, 1e8);
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(carol, 10_000e6, 0);
+        pool.liquidate(carol, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 10_000e6, 0);
 
         (uint256 aliceShares,,,,,,) = pool.getUserPosition(alice);
         (uint256 bobShares,,,,,,) = pool.getUserPosition(bob);
@@ -130,7 +130,7 @@ contract BadDebtTest is BaseSetup {
 
         uint256 supplyIndexBefore = pool.supplyIndex();
         vm.prank(address(0xdead));
-        pool.handleBadDebt(carol);
+        pool.handleBadDebt(carol, 0);
 
         assertLt(pool.supplyIndex(), supplyIndexBefore);
         uint256 aliceValue = aliceShares * pool.supplyIndex() / 1e18;
@@ -148,7 +148,7 @@ contract BadDebtTest is BaseSetup {
         uint256 supplyIndexBefore = pool.supplyIndex();
 
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         uint256 half = bobShares / 2;
         uint256 expectedNow = half * pool.supplyIndex() / 1e18;
@@ -157,7 +157,7 @@ contract BadDebtTest is BaseSetup {
 
         uint256 bobBalanceBefore = usdc.balanceOf(bob);
         vm.prank(bob);
-        pool.withdraw(half);
+        pool.withdraw(0, half);
         assertEq(usdc.balanceOf(bob) - bobBalanceBefore, expectedNow); // 按新 supplyIndex 取款
         _assertInvariant();
     }
@@ -166,7 +166,7 @@ contract BadDebtTest is BaseSetup {
     function test_AccrueAfterBadDebt_UsesNewSupplyIndex() public {
         _setupBadDebt(400_000e6);
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
         uint256 supplyIndexAfterBadDebt = pool.supplyIndex();
         uint256 supplyAfterBadDebt = pool.getTotalSupply();
         assertEq(pool.getTotalBorrows(), 0); // 唯一借款已清
@@ -211,11 +211,11 @@ contract BadDebtTest is BaseSetup {
 
         vm.prank(address(0xdead));
         vm.expectRevert(bytes("collateral exists"));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
 
         vm.prank(address(0xdead));
         vm.expectRevert(bytes("no debt"));
-        pool.handleBadDebt(bob);
+        pool.handleBadDebt(bob, 0);
 
         assertEq(pool.supplyIndex(), 1e18);
         assertEq(pool.getTotalSupply(), 100_000e6);
@@ -232,7 +232,7 @@ contract BadDebtTest is BaseSetup {
         vm.expectEmit(true, true, true, true);
         emit BadDebtRealized(alice, badDebt, 0, badDebt, supplyIndexBefore, expectedNewIndex);
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
         assertEq(pool.supplyIndex(), expectedNewIndex);
         _assertInvariant();
     }

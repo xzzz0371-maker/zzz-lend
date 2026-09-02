@@ -47,12 +47,12 @@ contract SecurityFixesTest is BaseSetup {
         oracle.setPrice(ETH, 1e8); // 抵押归零
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 200e6, 0); // 留 200 USDC 现金供后续 MIN_BORROW
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 200e6, 0); // 留 200 USDC 现金供后续 MIN_BORROW
         uint256 debt = pool.getDebt(alice) / 1e12;
         uint256 supply = pool.getTotalSupply();
         assertGt(debt, supply); // 债务 > 净资产 → 全额传导
         vm.prank(address(0xdead));
-        pool.handleBadDebt(alice);
+        pool.handleBadDebt(alice, 0);
         assertEq(pool.supplyIndex(), 0);
         assertGt(pool.cash(), 100e6);
     }
@@ -70,7 +70,7 @@ contract SecurityFixesTest is BaseSetup {
         pool.accrue(); // borrowIndex > WAD
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getDebt(alice), 0);
         (,,,,, uint256 tier,) = pool.getUserPosition(alice);
         assertEq(tier, 0);
@@ -89,7 +89,7 @@ contract SecurityFixesTest is BaseSetup {
         assertTrue(pool.isLiquidatable(alice));
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 1e12, 0); // 全额覆盖 → 清债，不 revert
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1e12, 0); // 全额覆盖 → 清债，不 revert
         assertEq(pool.getDebt(alice), 0);
         assertTrue(_conserved());
     }
@@ -103,7 +103,7 @@ contract SecurityFixesTest is BaseSetup {
         pool.accrue();
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getDebt(alice), 0);
         // 正常规模清算不受影响
         _supplyCollateral(bob, 2 ether);
@@ -112,7 +112,7 @@ contract SecurityFixesTest is BaseSetup {
         assertTrue(pool.isLiquidatable(bob));
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(bob, 1000e6, 0);
+        pool.liquidate(bob, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
         assertGt(pool.getDebt(bob), 0);
         assertLt(pool.getDebt(bob), 2000e6 * 1e12);
         assertTrue(_conserved());
@@ -199,17 +199,17 @@ contract SecurityFixesTest is BaseSetup {
         vm.prank(carol);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(carol);
-        pool.borrow(100e6, 5); // MIN_BORROW
+        pool.borrow(0, 100e6, 5); // MIN_BORROW
         oracle.setPrice(ETH, 50e8); // 砸盘 → HF=0.45，且 50% 覆盖可清空抵押
         assertTrue(pool.isLiquidatable(carol));
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(carol, 50e6, 0); // 覆盖 50 USDC → 抵押清零、残留债务
+        pool.liquidate(carol, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 50e6, 0); // 覆盖 50 USDC → 抵押清零、残留债务
         (, uint256 coll,,,,,) = pool.getUserPosition(carol);
         assertEq(coll, 0);
         assertGt(pool.getDebt(carol), 0);
         vm.prank(address(0xdead));
-        pool.handleBadDebt(carol);
+        pool.handleBadDebt(carol, 0);
         assertTrue(_conserved(), "conservation broken when no depositors");
     }
 
@@ -226,7 +226,7 @@ contract SecurityFixesTest is BaseSetup {
         // LendingPool._oracleAnomalous() → 新增敞口被阻断
         vm.prank(alice);
         vm.expectRevert(bytes("price anomalous"));
-        pool.borrow(100e6, 1);
+        pool.borrow(0, 100e6, 1);
         vm.prank(alice);
         vm.expectRevert(bytes("price anomalous"));
         pool.supplyCollateral{value: 1 ether}();
@@ -250,7 +250,7 @@ contract SecurityFixesTest is BaseSetup {
         _approveUsdc(alice, 10e6);
         vm.prank(alice);
         vm.expectRevert(bytes("amount below min"));
-        pool.supply(10e6 - 1);
+        pool.supply(0, 10e6 - 1);
     }
 
     function test_DustLimit_BorrowBelowMinReverts() public {
@@ -302,11 +302,11 @@ contract SecurityFixesTest is BaseSetup {
         clOracle.pause();
         vm.prank(liquidator);
         vm.expectRevert(bytes("oracle paused"));
-        pool.liquidate(alice, 1000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
 
         clOracle.unpause();
         vm.prank(liquidator);
-        pool.liquidate(alice, 1000e6, 0); // 恢复后清算成功
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0); // 恢复后清算成功
         assertLt(pool.getDebt(alice), 2000e6 * 1e12);
     }
 }

@@ -67,7 +67,7 @@ contract UsdcPegTest is BaseSetup {
 
         _approveUsdc(liquidator, type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(alice, 1000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
         uint256 debtCap = uint256(2000e6) * uint256(15e7) * uint256(1e12) / uint256(1e8);
         assertLt(pool.getDebt(alice), debtCap);
         _assertInvariant();

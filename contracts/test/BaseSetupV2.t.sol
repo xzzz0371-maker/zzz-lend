@@ -127,15 +127,40 @@ abstract contract BaseSetupV2 is BaseSetup {
 
     /// @notice 市场级资金守恒：cash + borrows == supply + reserve + treasury（token 单位）。
     function _assertMarketConservation(uint8 marketId) internal view {
-        uint256 lhs = pool.marketCash(marketId) + pool.marketBorrows(marketId);
-        uint256 rhs = pool.marketSupply(marketId) + pool.marketReserve(marketId) + pool.marketTreasury(marketId);
+        (uint256 cash_, uint256 borrows_, uint256 supply_, uint256 reserve_, uint256 treasury_,) =
+            pool.marketAccounts(marketId);
+        uint256 lhs = cash_ + borrows_;
+        uint256 rhs = supply_ + reserve_ + treasury_;
         assertEq(lhs, rhs, "market conservation broken");
     }
 
     /// @notice 坏账传导会因 supplyIndex 取整产生微小余数，容忍给定偏差。
     function _assertMarketConservationApprox(uint8 marketId, uint256 tol) internal view {
-        uint256 lhs = pool.marketCash(marketId) + pool.marketBorrows(marketId);
-        uint256 rhs = pool.marketSupply(marketId) + pool.marketReserve(marketId) + pool.marketTreasury(marketId);
+        (uint256 cash_, uint256 borrows_, uint256 supply_, uint256 reserve_, uint256 treasury_,) =
+            pool.marketAccounts(marketId);
+        uint256 lhs = cash_ + borrows_;
+        uint256 rhs = supply_ + reserve_ + treasury_;
         assertApproxEqAbs(lhs, rhs, tol, "market conservation approx broken");
+    }
+
+    // 便捷：市场级读数
+    function _marketCash(uint8 m) internal view returns (uint256) {
+        (uint256 cash_,,,,,) = pool.marketAccounts(m);
+        return cash_;
+    }
+
+    function _marketBorrows(uint8 m) internal view returns (uint256) {
+        (, uint256 b,,,,) = pool.marketAccounts(m);
+        return b;
+    }
+
+    function _marketSupply(uint8 m) internal view returns (uint256) {
+        (,, uint256 s,,,) = pool.marketAccounts(m);
+        return s;
+    }
+
+    function _marketReserve(uint8 m) internal view returns (uint256) {
+        (,,, uint256 r,,) = pool.marketAccounts(m);
+        return r;
     }
 }

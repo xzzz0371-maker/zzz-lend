@@ -17,7 +17,7 @@ contract LendingPoolTest is BaseSetup {
     function test_WithdrawRoundTrip() public {
         _supply(alice, 1000e6);
         vm.prank(alice);
-        pool.withdraw(1000e6);
+        pool.withdraw(0, 1000e6);
         assertEq(usdc.balanceOf(alice), 500_000e6);
         assertEq(pool.totalShares(), 0);
         assertEq(pool.cash(), 0);
@@ -27,14 +27,14 @@ contract LendingPoolTest is BaseSetup {
         _supply(alice, 1000e6);
         vm.prank(alice);
         vm.expectRevert(bytes("insufficient shares"));
-        pool.withdraw(1001e6);
+        pool.withdraw(0, 1001e6);
     }
 
     function test_BorrowRequiresCollateral() public {
         _supply(bob, 10_000e6);
         vm.prank(bob);
         vm.expectRevert(bytes("no collateral"));
-        pool.borrow(100e6, 1);
+        pool.borrow(0, 100e6, 1);
     }
 
     function test_BorrowRespectsTierLtv() public {
@@ -61,7 +61,7 @@ contract LendingPoolTest is BaseSetup {
         _borrow(alice, 1000e6, 5);
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         _borrow(alice, 3000e6, 5); // now allowed
         assertEq(pool.getDebt(alice), 3000e6 * 1e12);
     }
@@ -72,7 +72,7 @@ contract LendingPoolTest is BaseSetup {
         _borrow(alice, 1000e6, 1);
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getDebt(alice), 0);
         (,,,,, uint256 tier,) = pool.getUserPosition(alice);
         assertEq(tier, 0);
@@ -121,9 +121,9 @@ contract LendingPoolTest is BaseSetup {
         // cash now = 10000 - 7200 = 2800
         vm.prank(alice);
         vm.expectRevert(bytes("insufficient liquidity"));
-        pool.withdraw(3000e6);
+        pool.withdraw(0, 3000e6);
         vm.prank(alice);
-        pool.withdraw(2800e6); // exactly cash available
+        pool.withdraw(0, 2800e6); // exactly cash available
     }
 
     function test_CannotWithdrawCollateralWhileUnhealthy() public {
@@ -133,7 +133,7 @@ contract LendingPoolTest is BaseSetup {
         oracle.setPrice(ETH, 2500e8); // collateral 2500, debt 2400
         vm.prank(alice);
         vm.expectRevert(bytes("unhealthy"));
-        pool.withdrawCollateral(0.1 ether);
+        pool.withdrawCollateral(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 0.1 ether);
     }
 
     function test_SupplyAndBorrowFaucetFlow() public {

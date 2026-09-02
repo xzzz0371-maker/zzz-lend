@@ -69,7 +69,7 @@ abstract contract BaseSetup is Test {
     function _supply(address who, uint256 amount) internal {
         _approveUsdc(who, amount);
         vm.prank(who);
-        pool.supply(amount);
+        pool.supply(0, amount);
     }
 
     function _supplyCollateral(address who, uint256 ethAmount) internal {
@@ -79,6 +79,6 @@ abstract contract BaseSetup is Test {
 
     function _borrow(address who, uint256 amount, uint256 tier) internal {
         vm.prank(who);
-        pool.borrow(amount, tier);
+        pool.borrow(0, amount, tier);
     }
 }

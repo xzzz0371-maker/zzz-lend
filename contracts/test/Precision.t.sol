@@ -14,7 +14,7 @@ contract PrecisionTest is BaseSetup {
         _supply(alice, 10e6); // 最小存款 10 USDC
         assertEq(pool.totalShares(), 10e6);
         vm.prank(alice);
-        pool.withdraw(10e6);
+        pool.withdraw(0, 10e6);
         assertEq(pool.totalShares(), 0);
         assertEq(pool.cash(), 0);
         assertEq(usdc.balanceOf(alice), 500_000e6);
@@ -29,7 +29,7 @@ contract PrecisionTest is BaseSetup {
         assertGt(debt, 0);
         _approveUsdc(alice, type(uint256).max);
         vm.prank(alice);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
         assertEq(pool.getDebt(alice), 0);
         assertEq(pool.getTotalBorrows(), 0);
         _assertInvariant();
@@ -48,7 +48,7 @@ contract PrecisionTest is BaseSetup {
         uint256 claimable = shares * pool.supplyIndex() / 1e18;
         assertGe(claimable, 10e6);
         vm.prank(alice);
-        pool.withdraw(shares);
+        pool.withdraw(0, shares);
         assertGe(usdc.balanceOf(alice), 500_000e6);
         _assertInvariant();
     }
@@ -72,7 +72,7 @@ contract PrecisionTest is BaseSetup {
         uint256 totalWithdrawn;
         for (uint256 i = 0; i < 5; i++) {
             vm.prank(alice);
-            pool.withdraw(20_000e6);
+            pool.withdraw(0, 20_000e6);
             totalWithdrawn += 20_000e6 * pool.supplyIndex() / 1e18;
         }
         assertLe(totalWithdrawn, claimable);
@@ -87,7 +87,7 @@ contract PrecisionTest is BaseSetup {
         _approveUsdc(liquidator, type(uint256).max);
         uint256 debtBefore = pool.getDebt(alice);
         vm.prank(liquidator);
-        pool.liquidate(alice, 1, 0); // 只清算 1 微 USDC
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1, 0); // 只清算 1 微 USDC
         // 债务精确减少 1 微（1e12 WAD）
         assertApproxEqAbs(pool.getDebt(alice), debtBefore - 1e12, 1e12);
         _assertInvariant();

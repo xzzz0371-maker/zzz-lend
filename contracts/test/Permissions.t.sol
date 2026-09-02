@@ -115,7 +115,7 @@ contract PermissionsTest is BaseSetup {
 
         vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(alice);
-        pool.supply(100e6);
+        pool.supply(0, 100e6);
 
         vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(bob);
@@ -123,16 +123,16 @@ contract PermissionsTest is BaseSetup {
 
         vm.expectRevert(Pausable.EnforcedPause.selector);
         vm.prank(bob);
-        pool.borrow(100e6, 5);
+        pool.borrow(0, 100e6, 5);
 
         // withdraw still allowed during pause
         vm.prank(alice);
-        pool.withdraw(1000e6);
+        pool.withdraw(0, 1000e6);
 
         // repay still allowed during pause
         _approveUsdc(bob, type(uint256).max);
         vm.prank(bob);
-        pool.repay(type(uint256).max);
+        pool.repay(0, type(uint256).max);
 
         vm.prank(admin);
         pool.unpause();
@@ -143,14 +143,14 @@ contract PermissionsTest is BaseSetup {
         _supply(alice, 10_000e6);
         vm.expectRevert(bytes("insufficient shares"));
         vm.prank(admin);
-        pool.withdraw(10_000e6);
+        pool.withdraw(0, 10_000e6);
     }
 
     function test_AdminCannotMoveUserCollateral() public {
         _supplyCollateral(alice, 1 ether);
         vm.expectRevert(bytes("insufficient collateral"));
         vm.prank(admin);
-        pool.withdrawCollateral(1 ether);
+        pool.withdrawCollateral(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1 ether);
     }
 
     function test_AdminCannotRepayForUser() public {
@@ -159,7 +159,7 @@ contract PermissionsTest is BaseSetup {
         _borrow(alice, 1000e6, 5);
         vm.expectRevert(bytes("no debt"));
         vm.prank(admin);
-        pool.repay(100e6);
+        pool.repay(0, 100e6);
     }
 
     function test_NoFunctionTransfersUserShares() public {
@@ -169,6 +169,6 @@ contract PermissionsTest is BaseSetup {
         // shares are non-transferable: only the owner can withdraw them
         vm.expectRevert(bytes("insufficient shares"));
         vm.prank(bob);
-        pool.withdraw(shares);
+        pool.withdraw(0, shares);
     }
 }

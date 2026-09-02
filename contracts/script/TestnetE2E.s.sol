@@ -39,7 +39,7 @@ contract TestnetE2E is Script {
         vm.broadcast(keyA);
         usdc.approve(address(pool), type(uint256).max);
         vm.broadcast(keyA);
-        pool.supply(1000e6);
+        pool.supply(0, 1000e6);
         (uint256 sharesA,,,,,,) = pool.getUserPosition(userA);
         console2.log("[1] A supplied 1000 USDC, shares:", sharesA);
 
@@ -49,7 +49,7 @@ contract TestnetE2E is Script {
         vm.broadcast(adminKey);
         usdc.approve(address(pool), type(uint256).max);
         vm.broadcast(adminKey);
-        pool.supply(200_000e6);
+        pool.supply(0, 200_000e6);
         console2.log("[1b] deployer supplied extra liquidity for liquidation demo");
 
         // 2. Supply Collateral：B 存入 10 ETH
@@ -60,7 +60,7 @@ contract TestnetE2E is Script {
         // 3. Borrow：B 选 70% LTV 档位（tier 3），借到档位上限
         uint256 maxBorrow = pool.maxBorrowable(userB, 3);
         vm.broadcast(keyB);
-        pool.borrow(maxBorrow, 3);
+        pool.borrow(0, maxBorrow, 3);
         console2.log("[3] B borrowed (70% LTV cap):", maxBorrow, "USDC");
 
         // 4. 检查状态：债务 / 抵押价值 / HF / LTV
@@ -74,12 +74,12 @@ contract TestnetE2E is Script {
         vm.broadcast(keyB);
         usdc.approve(address(pool), type(uint256).max);
         vm.broadcast(keyB);
-        pool.repay(repayPart);
+        pool.repay(0, repayPart);
         console2.log("[5] B repaid:", repayPart, "USDC");
 
         // 6. Withdraw：A 提取部分存款
         vm.broadcast(keyA);
-        pool.withdraw(sharesA / 2);
+        pool.withdraw(0, sharesA / 2);
         console2.log("[6] A withdrew half of shares");
 
         // 7. 模拟清算：SwitchableOracle 切到可设价模式，ETH 下跌 30%
@@ -95,7 +95,7 @@ contract TestnetE2E is Script {
             vm.broadcast(liquidatorKey);
             usdc.approve(address(pool), type(uint256).max);
             vm.broadcast(liquidatorKey);
-            pool.liquidate(userB, 100_000e6, 0);
+            pool.liquidate(userB, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100_000e6, 0);
             console2.log("[7] liquidated user B; new HF:", pool.getUserHealthFactor(userB));
         } else {
             console2.log("[7] B not liquidatable, skip liquidation");

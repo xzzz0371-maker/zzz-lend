@@ -127,12 +127,12 @@ contract SwitchableOracleTest is Test {
         vm.prank(supplier);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(100_000e6);
+        pool.supply(0, 100_000e6);
 
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}(); // 3000 USD @ primary
         vm.prank(borrower);
-        pool.borrow(2000e6, 5); // LTV 66.7%
+        pool.borrow(0, 2000e6, 5); // LTV 66.7%
         assertGt(pool.getUserHealthFactor(borrower), 1e18);
 
         // PAUSER 切换到可设价模式，管理员设 ETH 价 -50% (1500) 及 USDC=1
@@ -148,7 +148,7 @@ contract SwitchableOracleTest is Test {
         vm.prank(liquidator);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(liquidator);
-        pool.liquidate(borrower, 2000e6, 0);
+        pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 2000e6, 0);
         assertLt(pool.getDebt(borrower), 2000e6 * 1e12);
 
         // 切回主源

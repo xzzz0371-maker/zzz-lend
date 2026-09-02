@@ -24,7 +24,7 @@ contract ReentrantToken is MockUSDC {
     function _update(address from, address to, uint256 value) internal override {
         super._update(from, to, value);
         if (attack && address(attackPool) != address(0)) {
-            attackPool.withdraw(1);
+            attackPool.withdraw(0, 1);
         }
     }
 }
@@ -67,7 +67,7 @@ contract SecurityTest is Test {
         vm.prank(supplier);
         token.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(100_000e6);
+        pool.supply(0, 100_000e6);
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}();
 
@@ -76,7 +76,7 @@ contract SecurityTest is Test {
 
         vm.prank(borrower);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
-        pool.borrow(100e6, 1);
+        pool.borrow(0, 100e6, 1);
     }
 
     function test_ReentrancyOnWithdrawBlocked() public {
@@ -84,14 +84,14 @@ contract SecurityTest is Test {
         vm.prank(supplier);
         token.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(1000e6);
+        pool.supply(0, 1000e6);
 
         vm.prank(supplier);
         token.setAttack(address(pool), true);
 
         vm.prank(supplier);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
-        pool.withdraw(1000e6);
+        pool.withdraw(0, 1000e6);
     }
 
     function test_ReentrancyOnLiquidationBlocked() public {
@@ -99,11 +99,11 @@ contract SecurityTest is Test {
         vm.prank(supplier);
         token.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(100_000e6);
+        pool.supply(0, 100_000e6);
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(borrower);
-        pool.borrow(2000e6, 5);
+        pool.borrow(0, 2000e6, 5);
 
         oracle.setPrice(ETH, 2000e8); // HF = 0.9, 可清算
 
@@ -114,6 +114,6 @@ contract SecurityTest is Test {
 
         vm.prank(liquidator);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
-        pool.liquidate(borrower, 500e6, 0);
+        pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 500e6, 0);
     }
 }

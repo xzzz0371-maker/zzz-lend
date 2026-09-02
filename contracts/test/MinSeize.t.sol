@@ -16,7 +16,7 @@ contract MinSeizeTest is BaseSetup {
         _setupLiquidatable();
         (, uint256 collBefore,,,,,) = pool.getUserPosition(alice);
         vm.prank(liquidator);
-        pool.liquidate(alice, 1000e6, 0.5 ether); // 实际约 0.525 ETH >= 0.5
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0.5 ether); // 实际约 0.525 ETH >= 0.5
         (, uint256 collAfter,,,,,) = pool.getUserPosition(alice);
         assertLt(collAfter, collBefore);
     }
@@ -25,13 +25,13 @@ contract MinSeizeTest is BaseSetup {
         _setupLiquidatable();
         vm.prank(liquidator);
         vm.expectRevert(bytes("seize below min"));
-        pool.liquidate(alice, 1000e6, 0.6 ether); // 实际约 0.525 < 0.6
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0.6 ether); // 实际约 0.525 < 0.6
     }
 
     function test_MinSeizeZeroNoLimit() public {
         _setupLiquidatable();
         vm.prank(liquidator);
-        pool.liquidate(alice, 1000e6, 0);
+        pool.liquidate(alice, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 1000e6, 0);
         assertLt(pool.getDebt(alice), 2000e6 * 1e12);
     }
 }

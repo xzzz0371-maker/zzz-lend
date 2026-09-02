@@ -67,7 +67,7 @@ contract StressTest is Test {
         vm.prank(supplier);
         usdc.approve(address(pool), type(uint256).max);
         vm.prank(supplier);
-        pool.supply(1_000_000e6);
+        pool.supply(0, 1_000_000e6);
 
         uint256 maxLTV = riskManager.getMaxLTV(tier);
         uint256 borrowAmt = 3000e6 * maxLTV / WAD;
@@ -75,7 +75,7 @@ contract StressTest is Test {
         vm.prank(borrower);
         pool.supplyCollateral{value: 1 ether}();
         vm.prank(borrower);
-        pool.borrow(borrowAmt, tier);
+        pool.borrow(0, borrowAmt, tier);
 
         // accrue interest and settle risk reserve
         vm.warp(block.timestamp + 30 days);
@@ -112,7 +112,7 @@ contract StressTest is Test {
                 uint256 h = pool.getUserHealthFactor(borrower);
                 if (h >= WAD) break;
                 vm.prank(liquidator);
-                try pool.liquidate(borrower, 100_000_000e6, 0) {}
+                try pool.liquidate(borrower, 0, 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, 100_000_000e6, 0) {}
                 catch {
                     break;
                 }
@@ -126,7 +126,7 @@ contract StressTest is Test {
             if (badDebt) {
                 uint256 rsvBefore = reserveManager.balance();
                 vm.prank(address(0xdead));
-                pool.handleBadDebt(borrower);
+                pool.handleBadDebt(borrower, 0);
                 _assertConserved();
                 reserveRow = rsvBefore > 0 ? "partial" : "zero";
             }
