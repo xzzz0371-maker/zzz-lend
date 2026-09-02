@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, MIN_SUPPLY, MAX_UINT, type MarketInfo } from "@/lib/config";
+import { ADDRESSES, MIN_SUPPLY, MAX_UINT, TX_GAS, type MarketInfo } from "@/lib/config";
 import { useMarketStats, useUserSharesOf, useTokenBalance, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, numToRaw } from "@/lib/format";
 import { SupplyApyDisplay } from "@/components/ApyDisplay";
@@ -90,6 +90,7 @@ export function SupplyTab({ market }: { market: MarketInfo }) {
               abi: MockTokenAbi,
               functionName: "approve",
               args: [ADDRESSES.lendingPool as Address, MAX_UINT],
+gas: TX_GAS,
             })
           }
         >
@@ -105,6 +106,7 @@ export function SupplyTab({ market }: { market: MarketInfo }) {
               abi: LendingPoolAbi,
               functionName: "supply",
               args: [BigInt(market.id), raw],
+gas: TX_GAS,
             })
           }
         >

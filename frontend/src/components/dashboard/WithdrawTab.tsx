@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
-import { ADDRESSES, type MarketInfo } from "@/lib/config";
+import { ADDRESSES, TX_GAS, type MarketInfo } from "@/lib/config";
 import { useMarketStats, useUserSharesOf, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
@@ -81,6 +81,7 @@ export function WithdrawTab({ market }: { market: MarketInfo }) {
             abi: LendingPoolAbi,
             functionName: "withdraw",
             args: [BigInt(market.id), sharesNeeded],
+gas: TX_GAS,
           })
         }
       >

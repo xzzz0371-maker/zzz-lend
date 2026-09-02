@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useBalance, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, COLLATERALS, MIN_COLLATERAL_TOKENS, MAX_UINT, ETH, type CollateralInfo } from "@/lib/config";
+import { ADDRESSES, COLLATERALS, MIN_COLLATERAL_TOKENS, MAX_UINT, TX_GAS, ETH, type CollateralInfo } from "@/lib/config";
 import { useUserPositionV2, useTokenBalance, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, formatUsd, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
@@ -83,6 +83,7 @@ function CollateralRow({
                 abi: MockTokenAbi,
                 functionName: "approve",
                 args: [ADDRESSES.lendingPool as Address, MAX_UINT],
+gas: TX_GAS,
               })
             }
           >
@@ -100,12 +101,14 @@ function CollateralRow({
                     functionName: "supplyCollateral",
                     args: [],
                     value: raw,
+gas: TX_GAS,
                   })
                 : writeContract({
                     address: ADDRESSES.lendingPool as Address,
                     abi: LendingPoolAbi,
                     functionName: "supplyCollateral",
                     args: [coll.address as Address, raw],
+gas: TX_GAS,
                   })
             }
           >
@@ -122,12 +125,14 @@ function CollateralRow({
                   abi: LendingPoolAbi,
                   functionName: "withdrawCollateral",
                   args: [raw],
+gas: TX_GAS,
                 })
               : writeContract({
                   address: ADDRESSES.lendingPool as Address,
                   abi: LendingPoolAbi,
                   functionName: "withdrawCollateral",
                   args: [coll.address as Address, raw],
+gas: TX_GAS,
                 })
           }
         >

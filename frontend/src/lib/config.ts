@@ -6,6 +6,8 @@ export const CHAIN_ID = 11155111;
 export const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 export const MAX_UINT =
   115792089237316195423570985008687907853269984665640564039457584007913129639935n;
+// 池内函数含时间型利息累计，gas 随是否跨区块波动；给宽裕上限避免估算差导致 OOG（EIP-1559 只按实际用量收费）。
+export const TX_GAS = 300_000n;
 
 export const ADDRESSES = {
   lendingPool: deployments.lendingPool,

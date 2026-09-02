@@ -4,7 +4,7 @@ import { useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
-import { ADDRESSES, MIN_BORROW, TIERS, COLLATERALS, COLLATERAL_TIER_LTV, COLLATERAL_TIER_LT, type MarketInfo } from "@/lib/config";
+import { ADDRESSES, MIN_BORROW, TIERS, COLLATERALS, COLLATERAL_TIER_LTV, COLLATERAL_TIER_LT, TX_GAS, type MarketInfo } from "@/lib/config";
 import { useUserPositionV2, useMarketStats, useMarketBorrowAprs, useAssetPrices, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, formatHealthFactor, numToRaw, rawToNum } from "@/lib/format";
 import { borrowAprAt, borrowAprUpperPct } from "@/lib/rates";
@@ -196,6 +196,7 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
             abi: LendingPoolAbi,
             functionName: "borrow",
             args: [BigInt(market.id), raw, BigInt(tier)],
+gas: TX_GAS,
           })
         }
       >

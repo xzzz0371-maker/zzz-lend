@@ -5,7 +5,7 @@ import { Suspense, useState } from "react";
 import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { MockTokenAbi } from "@/lib/abis";
-import { ADDRESSES, BORROW_MARKETS, COLLATERALS } from "@/lib/config";
+import { ADDRESSES, BORROW_MARKETS, COLLATERALS, TX_GAS } from "@/lib/config";
 import { useUserPositionV2, useAssetPrices, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { numToRaw } from "@/lib/format";
 import { PositionPanel } from "@/components/dashboard/PositionPanel";
