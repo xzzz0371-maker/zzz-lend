@@ -118,7 +118,7 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-500">7D Range (estimated)</span>
+          <span className="text-slate-500">7D Range (est.)</span>
           <span className="text-slate-800">
             {range7dLow.toFixed(2)}% – {range7dHigh.toFixed(2)}%
           </span>
@@ -127,6 +127,9 @@ export function BorrowTab({ initialTier }: { initialTier: number }) {
           <span className="text-slate-500">Utilization</span>
           <span className="text-slate-800">{utilPct.toFixed(2)}%</span>
         </div>
+        <p className="pt-1 text-[11px] text-slate-400">
+          7D ranges are estimated from the current rate model — not historical data.
+        </p>
         <div className="flex justify-between">
           <span className="text-slate-500">Max LTV</span>
           <span className="text-slate-800">{cfg.ltv}%</span>

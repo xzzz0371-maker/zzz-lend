@@ -107,7 +107,7 @@ export default function HomePage() {
               prefix="~"
               suffix="%"
               tone="success"
-              sub={`7D Average ~${supply7d.toFixed(2)}% · Utilization ${utilPct.toFixed(1)}%`}
+              sub={`7D Avg (est.) ~${supply7d.toFixed(2)}% · Util ${utilPct.toFixed(1)}% — not historical data`}
             />
           </div>
         )}

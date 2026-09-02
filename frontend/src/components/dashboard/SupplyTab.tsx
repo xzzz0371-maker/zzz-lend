@@ -60,9 +60,12 @@ export function SupplyTab() {
         <span className="text-emerald-600">{formatApy(supplyAprPct)}</span>
       </div>
       <div className="flex justify-between text-sm">
-        <span className="text-slate-500">Supply APY · 7D Average</span>
+        <span className="text-slate-500">Supply APY · 7D Avg (est.)</span>
         <span className="text-slate-800">{formatApy(supply7d)}</span>
       </div>
+      <p className="-mt-2 text-[11px] text-slate-400">
+        7D average is estimated from the current rate model — not historical data.
+      </p>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Utilization (now → after)</span>
         <span className="text-slate-800">
