@@ -21,10 +21,16 @@ contract RatePresetsTest is BaseSetup {
             assertGe(apr, prev);
             prev = apr;
         }
-        // util=80%（kink）=> base 0.5% + slope1 4% × 0.8 = 3.7%
+        // util=80%（kink1）=> 0.5% + 4%×0.8 = 3.7%
         assertApproxEqAbs(_aprAt(irm, 8e17, 1), 3.7e16, 1e14);
-        // util=100% => 0.5% + 4%*0.8 + 50%*0.2 = 13.7%
-        assertApproxEqAbs(_aprAt(irm, 1e18, 1), 13.7e16, 1e14);
+        // util=85%（kink2）=> 3.7% + 25%×0.05 = 4.95%
+        assertApproxEqAbs(_aprAt(irm, 85e16, 1), 4.95e16, 1e14);
+        // util=90% => 4.95% + 50%×0.05 = 7.45%
+        assertApproxEqAbs(_aprAt(irm, 9e17, 1), 7.45e16, 1e14);
+        // util=100% => 4.95% + 50%×0.15 = 12.45%
+        assertApproxEqAbs(_aprAt(irm, 1e18, 1), 12.45e16, 1e14);
+        // 两处拐点参数生效
+        assertEq(irm.kink2Utilization(), 85e16);
         // 档位溢价：0/1/2/3/4.5%
         assertApproxEqAbs(_aprAt(irm, 5e17, 2) - _aprAt(irm, 5e17, 1), 1e16, 1e14);
         assertApproxEqAbs(_aprAt(irm, 5e17, 5) - _aprAt(irm, 5e17, 1), 4.5e16, 1e14);
