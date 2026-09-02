@@ -120,6 +120,13 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
           Min {MIN_BORROW} {market.symbol} · Max borrowable: {formatToken(maxRaw, market.decimals)}{" "}
           {market.symbol}
         </p>
+        {collValueUsd > 0 && maxRaw > 0n && maxRaw < numToRaw(MIN_BORROW, market.decimals) && (
+          <p className="mt-1 text-xs text-danger">
+            Collateral too low — max borrowable is below the {MIN_BORROW} {market.symbol} minimum.
+            Add more collateral, or pick a higher LTV tier (50/60/70/75/80) if that still isn't
+            enough.
+          </p>
+        )}
       </div>
 
       <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700 ring-1 ring-sky-200">
@@ -186,6 +193,22 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
           </div>
         )}
       </div>
+
+      {address && !valid && !isPending && (
+        <p className="text-xs text-danger">
+          {tierLocked
+            ? `You are already borrowing at tier ${Number(position?.tier)} — repay in full to switch tiers.`
+            : collValueUsd <= 0
+              ? "No collateral — deposit ETH/wstETH/WBTC in the Collateral tab first."
+              : raw <= 0n
+                ? `Enter an amount of at least ${MIN_BORROW} ${market.symbol}.`
+                : raw > maxRaw
+                  ? `Amount exceeds max borrowable (${formatToken(maxRaw, market.decimals)} ${market.symbol}).`
+                  : maxRaw > 0n && maxRaw < numToRaw(MIN_BORROW, market.decimals)
+                    ? `Max borrowable (${formatToken(maxRaw, market.decimals)} ${market.symbol}) is below the ${MIN_BORROW} ${market.symbol} minimum — add collateral or choose a higher LTV tier.`
+                    : "Check your inputs."}
+        </p>
+      )}
 
       <button
         className="btn-primary w-full"
