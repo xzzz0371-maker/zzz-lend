@@ -33,7 +33,7 @@ export function usePoolStats() {
       { ...pool, functionName: "totalShares" },
       { ...pool, functionName: "supplyIndex" },
     ],
-    query: { refetchInterval: 12_000 },
+    query: { refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
 
   const d = data as unknown as Array<{ result?: bigint }> | undefined;
@@ -61,7 +61,7 @@ export function useBorrowAprs() {
       functionName: "getBorrowAPR",
       args: [BigInt(t.tier)],
     })),
-    query: { refetchInterval: 12_000 },
+    query: { refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   const d = data as unknown as Array<{ result?: bigint }> | undefined;
   // getBorrowAPR returns WAD per year → convert to %.
@@ -89,7 +89,7 @@ export function useUserPosition(user: Address | undefined) {
     ...pool,
     functionName: "getUserPosition",
     args: user ? [user] : undefined,
-    query: { enabled: !!user, refetchInterval: 12_000 },
+    query: { enabled: !!user, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   const d = data as unknown as
     | [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
@@ -113,7 +113,7 @@ export function useMaxBorrowable(user: Address | undefined, tier: number) {
     ...pool,
     functionName: "maxBorrowable",
     args: user && tier ? [user, BigInt(tier)] : undefined,
-    query: { enabled: !!user && !!tier, refetchInterval: 12_000 },
+    query: { enabled: !!user && !!tier, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return (data as bigint | undefined) ?? 0n;
 }
@@ -132,14 +132,14 @@ export function usePrices(): Prices {
     abi: SwitchableOracleAbi,
     functionName: "getAssetPrice",
     args: [ETH_ADDRESS as Address],
-    query: { refetchInterval: 30_000, retry: false },
+    query: { refetchInterval: 30_000, refetchIntervalInBackground: true, retry: false },
   });
   const { data: usdcRaw } = useReadContract({
     address: ADDRESSES.switchableOracle as Address,
     abi: SwitchableOracleAbi,
     functionName: "getAssetPrice",
     args: [ADDRESSES.usdc as Address],
-    query: { refetchInterval: 30_000, retry: false },
+    query: { refetchInterval: 30_000, refetchIntervalInBackground: true, retry: false },
   });
   const ethUsd = ethRaw !== undefined && ethRaw !== null ? Number(ethRaw) / 1e8 : FALLBACK_ETH_PRICE;
   const usdcUsd = usdcRaw !== undefined && usdcRaw !== null ? Number(usdcRaw) / 1e8 : 1;
@@ -160,7 +160,7 @@ export function useUsdcBalance(user: Address | undefined) {
     ],
     functionName: "balanceOf",
     args: user ? [user] : undefined,
-    query: { enabled: !!user, refetchInterval: 12_000 },
+    query: { enabled: !!user, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return data as bigint | undefined;
 }
@@ -179,7 +179,7 @@ export function useUsdcAllowance(owner: Address | undefined, spender: Address | 
     ],
     functionName: "allowance",
     args: owner && spender ? [owner, spender] : undefined,
-    query: { enabled: !!owner && !!spender, refetchInterval: 12_000 },
+    query: { enabled: !!owner && !!spender, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return { allowance: (data as bigint | undefined) ?? 0n, refetch };
 }
@@ -204,7 +204,7 @@ export function useMarketStats(marketId: number) {
       { ...pool, functionName: "marketUtilization", args: [BigInt(marketId)] },
       { ...pool, functionName: "marketSupplyAPR", args: [BigInt(marketId)] },
     ],
-    query: { refetchInterval: 12_000 },
+    query: { refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   const d = data as unknown as Array<{ result?: unknown }> | undefined;
   const acc = d?.[0]?.result as [bigint, bigint, bigint, bigint, bigint, bigint] | undefined;
@@ -230,7 +230,7 @@ export function useMarketBorrowAprs(marketId: number) {
       functionName: "marketBorrowAPR",
       args: [BigInt(marketId), BigInt(t.tier)],
     })),
-    query: { refetchInterval: 12_000 },
+    query: { refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   const d = data as unknown as Array<{ result?: bigint }> | undefined;
   const aprs: Record<number, number> = {};
@@ -247,7 +247,7 @@ export function useUserSharesOf(user: Address | undefined, marketId: number) {
     ...pool,
     functionName: "userSharesOf",
     args: user ? [user, BigInt(marketId)] : undefined,
-    query: { enabled: !!user, refetchInterval: 12_000 },
+    query: { enabled: !!user, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return (data as bigint | undefined) ?? 0n;
 }
@@ -261,7 +261,7 @@ export function useAssetPrices(addresses: string[]): Record<string, number> {
       functionName: "getAssetPrice",
       args: [a as Address],
     })),
-    query: { refetchInterval: 30_000, retry: false },
+    query: { refetchInterval: 30_000, refetchIntervalInBackground: true, retry: false },
   });
   const d = data as unknown as Array<{ result?: bigint }> | undefined;
   const out: Record<string, number> = {};
@@ -297,7 +297,7 @@ export function useUserPositionV2(user: Address | undefined) {
       { ...pool, functionName: "userDebtToken", args: user ? [user, 1n] : undefined },
       { ...pool, functionName: "userDebtToken", args: user ? [user, 2n] : undefined },
     ],
-    query: { enabled: !!user, refetchInterval: 12_000 },
+    query: { enabled: !!user, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   const d = data as unknown as Array<{ result?: unknown }> | undefined;
   const g = d?.[0]?.result as [bigint, bigint, bigint, boolean] | undefined;
@@ -347,7 +347,7 @@ export function useTokenBalance(token: Address | undefined, user: Address | unde
     abi: erc20ViewAbi,
     functionName: "balanceOf",
     args: user ? [user] : undefined,
-    query: { enabled: !!user && !!token, refetchInterval: 12_000 },
+    query: { enabled: !!user && !!token, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return (data as bigint | undefined) ?? 0n;
 }
@@ -358,7 +358,7 @@ export function useTokenAllowance(token: Address | undefined, user: Address | un
     abi: erc20ViewAbi,
     functionName: "allowance",
     args: user && spender ? [user, spender] : undefined,
-    query: { enabled: !!user && !!spender && !!token, refetchInterval: 12_000 },
+    query: { enabled: !!user && !!spender && !!token, refetchInterval: 6_000, refetchIntervalInBackground: true },
   });
   return { allowance: (data as bigint | undefined) ?? 0n, refetch };
 }
