@@ -6,7 +6,7 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { MockTokenAbi } from "@/lib/abis";
 import { ADDRESSES, BORROW_MARKETS, COLLATERALS } from "@/lib/config";
-import { useUserPositionV2, useAssetPrices } from "@/lib/hooks";
+import { useUserPositionV2, useAssetPrices, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { numToRaw } from "@/lib/format";
 import { PositionPanel } from "@/components/dashboard/PositionPanel";
 import { SupplyTab } from "@/components/dashboard/SupplyTab";
@@ -36,7 +36,8 @@ function DashboardInner() {
   const { position } = useUserPositionV2(address as Address);
   const allTokens = [...COLLATERALS.map((c) => c.address), ...BORROW_MARKETS.map((m) => m.address)];
   const prices = useAssetPrices(allTokens);
-  const { data: faucetHash, isPending: faucetPending, writeContract: faucet } = useWriteContract();
+  const { data: faucetHash, isPending: faucetPending, isSuccess: faucetSuccess, writeContract: faucet } = useWriteContract();
+  useInvalidateAllOnTxSuccess(faucetSuccess);
 
   if (!isConnected) {
     return (

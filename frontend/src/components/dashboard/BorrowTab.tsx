@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_BORROW, TIERS, COLLATERALS, COLLATERAL_TIER_LTV, COLLATERAL_TIER_LT, type MarketInfo } from "@/lib/config";
-import { useUserPositionV2, useMarketStats, useMarketBorrowAprs, useAssetPrices } from "@/lib/hooks";
+import { useUserPositionV2, useMarketStats, useMarketBorrowAprs, useAssetPrices, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, formatHealthFactor, numToRaw, rawToNum } from "@/lib/format";
 import { borrowAprAt, borrowAprUpperPct } from "@/lib/rates";
 import { YieldBreakdown } from "@/components/YieldBreakdown";
@@ -22,7 +22,8 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
   const collTokens = COLLATERALS.map((c) => c.address);
   const prices = useAssetPrices([...collTokens, market.address]);
 
-  const { data: hash, isPending, writeContract } = useWriteContract();
+  const { data: hash, isPending, isSuccess, writeContract } = useWriteContract();
+  useInvalidateAllOnTxSuccess(isSuccess);
 
   const cfg = TIERS.find((t) => t.tier === tier)!;
   const collBalances = COLLATERALS.map((c) =>

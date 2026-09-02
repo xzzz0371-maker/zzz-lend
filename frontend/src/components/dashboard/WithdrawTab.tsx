@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi } from "@/lib/abis";
 import { ADDRESSES, type MarketInfo } from "@/lib/config";
-import { useMarketStats, useUserSharesOf } from "@/lib/hooks";
+import { useMarketStats, useUserSharesOf, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
@@ -15,7 +15,8 @@ export function WithdrawTab({ market }: { market: MarketInfo }) {
   const { stats } = useMarketStats(market.id);
   const shares = useUserSharesOf(address as Address, market.id);
 
-  const { data: hash, isPending, writeContract } = useWriteContract();
+  const { data: hash, isPending, isSuccess, writeContract } = useWriteContract();
+  useInvalidateAllOnTxSuccess(isSuccess);
 
   const amountNum = parseFloat(amount);
   const raw = numToRaw(amountNum, market.decimals);

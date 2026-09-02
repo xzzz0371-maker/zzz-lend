@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount, useBalance, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
 import { ADDRESSES, COLLATERALS, MIN_COLLATERAL_TOKENS, MAX_UINT, ETH, type CollateralInfo } from "@/lib/config";
-import { useUserPositionV2, useTokenBalance, useTokenAllowance } from "@/lib/hooks";
+import { useUserPositionV2, useTokenBalance, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, formatUsd, numToRaw, rawToNum } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
@@ -36,7 +36,8 @@ function CollateralRow({
   );
   const needApproval = !coll.native && raw > 0n && allowance < raw;
 
-  const { data: hash, isPending, writeContract } = useWriteContract();
+  const { data: hash, isPending, isSuccess, writeContract } = useWriteContract();
+  useInvalidateAllOnTxSuccess(isSuccess);
 
   const minRaw = numToRaw(MIN_COLLATERAL_TOKENS, coll.decimals);
   const depositValid = amountNum >= MIN_COLLATERAL_TOKENS && raw > 0n && raw <= balance;

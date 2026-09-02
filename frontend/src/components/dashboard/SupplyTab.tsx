@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
 import { ADDRESSES, MIN_SUPPLY, MAX_UINT, type MarketInfo } from "@/lib/config";
-import { useMarketStats, useUserSharesOf, useTokenBalance, useTokenAllowance } from "@/lib/hooks";
+import { useMarketStats, useUserSharesOf, useTokenBalance, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, numToRaw } from "@/lib/format";
 import { SupplyApyDisplay } from "@/components/ApyDisplay";
 import { TxStatus } from "./TxStatus";
@@ -26,7 +26,8 @@ export function SupplyTab({ market }: { market: MarketInfo }) {
   const raw = numToRaw(amountNum, market.decimals);
   const needApproval = raw > 0n && allowance < raw;
 
-  const { data: hash, isPending, writeContract } = useWriteContract();
+  const { data: hash, isPending, isSuccess, writeContract } = useWriteContract();
+  useInvalidateAllOnTxSuccess(isSuccess);
 
   const supplyAprPct = stats ? (Number(stats.supplyApr) / 1e18) * 100 : undefined;
   const utilPct = stats ? (Number(stats.utilization) / 1e18) * 100 : 0;

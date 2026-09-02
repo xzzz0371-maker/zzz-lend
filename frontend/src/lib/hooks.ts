@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useReadContract, useReadContracts } from "wagmi";
 import { type Address } from "viem";
 import { LendingPoolAbi, SwitchableOracleAbi } from "./abis";
@@ -7,6 +9,14 @@ import { ADDRESSES, ETH_ADDRESS, FALLBACK_ETH_PRICE } from "./config";
 import { TIERS } from "./config";
 
 const pool = { address: ADDRESSES.lendingPool as Address, abi: LendingPoolAbi } as const;
+
+/// 交易成功后立即失效并重拉全部链上查询（余额/份额/市场），无需等轮询。
+export function useInvalidateAllOnTxSuccess(isSuccess: boolean | undefined) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (isSuccess) qc.invalidateQueries();
+  }, [isSuccess, qc]);
+}
 
 export interface PoolStats {
   totalSupply: bigint;

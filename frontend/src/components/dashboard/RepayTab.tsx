@@ -5,7 +5,7 @@ import { type Address } from "viem";
 import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
 import { ADDRESSES, MAX_UINT, type MarketInfo } from "@/lib/config";
-import { useUserPositionV2, useTokenAllowance } from "@/lib/hooks";
+import { useUserPositionV2, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, numToRaw, rawToNum, formatHealthFactor } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
@@ -19,7 +19,8 @@ export function RepayTab({ market }: { market: MarketInfo }) {
     ADDRESSES.lendingPool as Address,
   );
 
-  const { data: hash, isPending, writeContract } = useWriteContract();
+  const { data: hash, isPending, isSuccess, writeContract } = useWriteContract();
+  useInvalidateAllOnTxSuccess(isSuccess);
 
   const debtRaw = position ? position.marketDebt[market.id] ?? 0n : 0n;
   const amountNum = parseFloat(amount);
