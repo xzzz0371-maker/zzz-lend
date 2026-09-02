@@ -119,21 +119,13 @@ gas: TX_GAS,
           className="btn-outline flex-1 text-xs"
           disabled={!address || !withdrawValid || isPending}
           onClick={() =>
-            coll.native
-              ? writeContract({
-                  address: ADDRESSES.lendingPool as Address,
-                  abi: LendingPoolAbi,
-                  functionName: "withdrawCollateral",
-                  args: [raw],
+            writeContract({
+              address: ADDRESSES.lendingPool as Address,
+              abi: LendingPoolAbi,
+              functionName: "withdrawCollateral",
+              args: [coll.address as Address, raw],
 gas: TX_GAS,
-                })
-              : writeContract({
-                  address: ADDRESSES.lendingPool as Address,
-                  abi: LendingPoolAbi,
-                  functionName: "withdrawCollateral",
-                  args: [coll.address as Address, raw],
-gas: TX_GAS,
-                })
+            })
           }
         >
           {isPending ? "Waiting for wallet…" : `Withdraw ${coll.symbol}`}
