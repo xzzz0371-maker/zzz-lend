@@ -2,7 +2,7 @@
 
 > **单一总文档**：汇总产品、架构、合约、阶段进度、测试、安全、部署与待办（原分阶段/交接/配置文档已并入后删除）。
 > 归总日期：2026-08-29（**V2 多资产更新：2026-09-02**）
-> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：23 suites / 181 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
+> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：23 suites / 184 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
 > ⚠️ 本文档按 V1 单市场撰写；**多资产 V2 全部改动与新增资产表见第 9 章（2026-09-02）**，正文中冲突处以第 9 章为准。
 
 ---
@@ -295,7 +295,7 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 ## 4.1 测试总览 — 2026-09-02（每次跑完测试更新本表日期/用例数）
 
 ```
-forge test:  23 suites, 181 passed, 0 failed, 0 skipped
+forge test:  23 suites, 184 passed, 0 failed, 0 skipped
 forge fmt --check: 通过
 ```
 
@@ -441,26 +441,26 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 
 > **部署者始终是最终管理者**（DEFAULT_ADMIN 未移交 + 未撤销构造器角色）。测试网可接受；生产必须移交多签并撤销部署者角色。TESTNET_ADMIN 缺省=部署者。
 
-## 6.7 已部署地址回填表（Sepolia · 2026-09-02 多资产 V2 全新部署）
+## 6.7 已部署地址回填表（Sepolia · 2026-09-02 二次部署 · 含三段 IRM + collectTreasury(uint8)）
 
 | 合约/资产 | 地址 | 验证状态 |
 |---|---|---|
-| MockUSDC | `0x68CdE0DaDb0E6903DcED4F544Cd665290Ed5ceEF` | ✅ 已部署 |
-| USDT（Mock，6dp） | `0x5d4f1887147bF27De679dbd93caf420b2973459D` | ✅ 已部署 |
-| DAI（Mock，18dp） | `0x49f9ADb3bBC8951D0B2Ef38cc0a7db68139f71ef` | ✅ 已部署 |
-| wstETH（Mock，18dp） | `0x36B2d15657bcc2D8309AD4DaAC1f36517e9C8522` | ✅ 已部署 |
-| WBTC（Mock，8dp） | `0xBEB1dA0E255f688b310100Ed1d5d9614a3e6DDd2` | ✅ 已部署 |
-| ChainlinkOracle | `0x8d8F23D3abC4FF69b07939dF6188C53C84B6Ced7` | ✅ 已部署（ETH/USDC 真 feed + 其余 Mock feed） |
-| SwitchableOracle | `0xe71B694b38a23c1f5a52035e4aD6e38eaf742F12` | ✅ 已部署（主源=Chainlink） |
-| MockPriceOracle | `0xa0e5237773391e00392307BfCC163be30e14Da69` | ✅ 已部署 |
-| InterestRateModel | `0x802DfD4ED09B086A57226543DDDde9e04c2C8ec8` | ✅ 已部署（NORMAL 预设） |
-| RiskManager | `0xe3D73D8214C392fAA497991B4728Fbfb7433286f` | ✅ 已部署（ETH/wstETH 同表 + WBTC 保守表） |
-| LiquidationManager | `0xF351531647451d612a7DAaa4A8FAD83A4BF19cF7` | ✅ 已部署 |
-| ReserveManager | `0x1FE9d734d5FC2d23260867Eb06F591f63D5999dA` | ✅ 已部署（defaultToken=USDC，可按 token 覆盖） |
-| RiskEngine | `0xAb105e632e4B336eA4E9259ef026a068831d9Cfc` | ✅ 已部署 |
-| LendingPool | `0x02f0d38Ee99c5Cd2d36EB4B8A419d343b95FEef6` | ✅ 已部署（**V2 多市场：USDC/USDT/DAI 市场 + ETH/wstETH/WBTC 抵押**） |
+| MockUSDC | `0x31eEAd013AE6fD0E82521642133b2ABbcd0c670c` | ✅ 已部署 |
+| USDT（Mock，6dp） | `0x8acAC8F8078D36BE72980185156560653ffB9768` | ✅ 已部署 |
+| DAI（Mock，18dp） | `0x363789F875DCf32A0d5167c4aB22C1C7D901C93f` | ✅ 已部署 |
+| wstETH（Mock，18dp） | `0x47F88079b82e1F6a4b72BbDD501306E9EbEf722E` | ✅ 已部署 |
+| WBTC（Mock，8dp） | `0x3417C39d2f0597E75Ff1dB59A40f96F9Bf8144D1` | ✅ 已部署 |
+| ChainlinkOracle | `0xeC65f20fC4339A6dC9237640327a80566bcBFbF2` | ✅ 已部署（ETH/USDC 真 feed + 其余 Mock feed） |
+| SwitchableOracle | `0x403e70d61C58A75687057C8e765a9eFC6B679C61` | ✅ 已部署（主源=Chainlink） |
+| MockPriceOracle | `0xdfe5259BC53eD1f346FdD4AE02f2A9697bF394a2` | ✅ 已部署 |
+| InterestRateModel | `0xC452Cfc167D9D00cC8Dfe19C038830Bb19609BC7` | ✅ 已部署（**NORMAL 三段**：80→3.70%、85→4.95%、90→7.45%、100→12.45% 链上验证） |
+| RiskManager | `0x0C979f4862E104eF1747a21BFEBDcD666E548BE2` | ✅ 已部署（ETH/wstETH 同表 + WBTC 保守 45..75/55..85） |
+| LiquidationManager | `0xb51b5020F1766F1B76209799E68F9fC0c01f84C8` | ✅ 已部署 |
+| ReserveManager | `0xEdE990A65269418973e77dA8c511EfC6FC43b451` | ✅ 已部署（defaultToken=USDC，可按 token 覆盖） |
+| RiskEngine | `0x422A741281D20C5D15aF878eA1126cb4cea57c66` | ✅ 已部署 |
+| LendingPool | `0x8c38b79C8eBE3e6eDe272bA06dB4A4BC0b4E8726` | ✅ 已部署（**多市场 + 按市场 `collectTreasury(uint8)`**） |
 
-> **部署记录（2026-09-02 V2）**：为支持多资产，全部合约以 V2 源码重新部署（地址见上表；**此前的 2026-08-31/09-01 单市场地址已被本次取代**，旧前端/演示访问的池为旧代码，如需沿用请勿与新地址混用）。部署/初始化见 `script/Deploy.s.sol`：注册 USDT(6)/DAI(18) 市场与 wstETH(18)/WBTC(8) 抵押 → RiskManager 写入各资产档位（wstETH 同 ETH、WBTC 保守表）→ 为 USDT/DAI/wstETH/WBTC 注册 MockAggregator feed。演示统一经 SwitchableOracle 可设价模式提供确定价格（USDC/USD 真 feed 常 stale）。冒烟验证：USDC 市场 supply→ETH 抵押→borrow(tier3)→repay 全通；E2E 见 `script/e2e_sepolia_v2.sh`（逐资产 supply/borrow/repay/withdraw/liquidate）。部署者 `0xC35C...6830`。
+> **部署记录（2026-09-02 二次部署，替代当日前一次 V2 地址）**：为让**会话 26/27 变更上链**（① LendingPool `collectTreasury(uint8)` 按市场提取；② InterestRateModel NORMAL 三段曲线）整体重新部署。部署/初始化见 `script/Deploy.s.sol`。链上验证：`getBorrowAPR(0.8/0.85/0.9/1.0,1)` ≈ 3.70/4.95/7.45/12.45%；WBTC LTV5/LT5=75%/85%、wstETH LTV5=80%；`marketAccounts(0/1/2)` 可用；可设价模式价格已设、`treasuryAddress` 已设（冒烟 supply 后即可集收）。演示播种：USDC 20000 / USDT 10000 / DAI ~5015 供应 + 三市场各借 200（0.5 ETH 抵押，HF≈1.95），供首页/演示展示。Anvil 预演（`MOCK_FEEDS=1` 全流程）先行通过。部署者 `0xC35C...6830`。
 
 ## 6.8 cast 命令速查
 
