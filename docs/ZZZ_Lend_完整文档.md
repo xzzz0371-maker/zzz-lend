@@ -409,22 +409,22 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 
 > **部署者始终是最终管理者**（DEFAULT_ADMIN 未移交 + 未撤销构造器角色）。测试网可接受；生产必须移交多签并撤销部署者角色。TESTNET_ADMIN 缺省=部署者。
 
-## 6.7 已部署地址回填表（Sepolia · 2026-08-31 · v1.0）
+## 6.7 已部署地址回填表（Sepolia · 2026-09-01 重新部署 · v2.0）
 
 | 合约 | 地址 | 验证状态 |
 |---|---|---|
-| MockUSDC | `0x3b661C85cAC1eEfE87dA365c43498A0166399D5D` | ✅ 已部署 |
-| ChainlinkOracle | `0xb89ddB72c1F97b0C1CcbF5f842d029856Aff979c` | ✅ 已验证（ETH/USD 实时可读） |
-| SwitchableOracle | `0x33e6974B61dA455a97482BfF05EFb8191a447007` | ✅ 已验证（主源=Chainlink） |
-| MockPriceOracle | `0x83DadF7A57908D06B54969A1587fc4D4F5b7f4D7` | ✅ 已部署 |
-| InterestRateModel | `0xad3f7eee666DAEE83AcaBb625DD66ed7E402002b` | ✅ 已验证（NORMAL 预设） |
-| RiskManager | `0xad07d4918923Cb62df85F1F16d2630A5CECa2bB6` | ✅ 已部署 |
-| LiquidationManager | `0xa672e6fE327317E7c76C4335db78243dC81FB2c9` | ✅ 已部署 |
-| ReserveManager | `0xf42745f887f8a469A61C18eC765244Fe917Df634` | ✅ 已验证（lendingPool 接线正确） |
-| RiskEngine | `0xB203c077EB69B99954846Fb9521D1D56E6F5764C` | ✅ 已部署 |
-| LendingPool | `0x4c0F60fb5ee400f8430259a8C20cB35dE31d1a19` | ✅ 已验证（参数/角色/费率） |
+| MockUSDC | `0x3e4f4513Ba65ec010A0eab1ABA168c80E62450E7` | ✅ 已部署 |
+| ChainlinkOracle | `0x422C471e12943162eED504be5e288A3D6B9a987b` | ✅ 已验证（ETH/USD 实时可读） |
+| SwitchableOracle | `0xB4F103d3E42D85fD3246017b9c092F836D83fe97` | ✅ 已验证（主源=Chainlink） |
+| MockPriceOracle | `0x9F6DB2e1D5028A5c1Bd8868C9BAEc60FAd2B2d2C` | ✅ 已部署 |
+| InterestRateModel | `0xb124B80801002891A72Ee9056093F8cEA9593Dc2` | ✅ 已验证（NORMAL 预设新参数） |
+| RiskManager | `0xA49CfEFCbc9766eccF81FF17d981AE9945C66Df9` | ✅ 已部署 |
+| LiquidationManager | `0x01f69710DAc358D0fece2e3CcA29Ae3900EdA700` | ✅ 已部署 |
+| ReserveManager | `0x1449AF616834692A93B3629883035942F5546D2F` | ✅ 已验证（lendingPool 接线正确） |
+| RiskEngine | `0x2C9E8778F60be3AF740633157ca4CF8670023fB9` | ✅ 已部署 |
+| LendingPool | `0xD33721afEfB924A390525213A590Eb8db56D13aA` | ✅ 已验证（新参数/角色/费率） |
 
-> **部署记录（2026-08-31）**：RPC 用 `https://ethereum-sepolia-rpc.publicnode.com`（ankr 需 API key、`rpc.sepolia.org` 404）。部署者 `0xC35C...6830`（4 ETH 起，部署后 ~3.988 ETH）。LendingPool 参数验证：`getUtilization()=0`、`getSupplyAPR()=0`、`getBorrowAPR(1)=~2%`、`reserveFactor=5%`、`treasuryFactor=3%`、`reserveTargetRatio=3%`、`supplyIndex=1e18`；角色 DEFAULT_ADMIN/PARAM_ADMIN/PAUSER=部署者；`ReserveManager.lendingPool` 已接线。⚠️ **USDC/USD feed（`0xA2F78...`）当前 stale**：last update ~11h 前，超过 1h `maxStaleness`，读 USDC 价会 revert（价格本身正确 0.9999）；待 feed 更新或由管理员调 `maxStaleness` 后再做借/还/清算相关操作。**E2E 已执行**（存/借/还/取/清算/守恒全通过，金额因测试网 ETH 余额缩放），详细报告见 `docs/E2E_Sepolia_测试报告.md`。**（2026-09-01 参数已调整：NORMAL base 0.5%/slope1 4%/slope2 50%/溢价 0,1,2,3,4.5%，分成 94/4/2，见 §3.2。）**
+> **部署记录（2026-09-01 重新部署）**：为让新参数链上生效（NORMAL base 0.5%/slope1 4%/slope2 50%、档位溢价 0/1/2/3/4.5%、分成 94/4/2），全部合约重新部署（地址见上表）。链上验证：`getBorrowAPR(1)` util=0 → **0.5%**、util=20% → **1.3%**；`reserveFactor=4%`、`treasuryFactor=2%`、`depositorShare=94%`；档位溢价 T2/T3/T4/T5 = 1%/2%/3%/4.5%。冒烟测试：supply 500 USDC + borrow 100 USDC（tier1）成功。池子从 0 开始（旧链上测试数据已清空）。部署者 `0xC35C...6830`。⚠️ **USDC/USD feed 仍可能 stale**，读价相关操作若 revert 需等 feed 更新或调 `maxStaleness`。首次部署记录（2026-08-31，旧地址）见 `docs/E2E_Sepolia_测试报告.md`。
 
 ## 6.8 cast 命令速查
 
