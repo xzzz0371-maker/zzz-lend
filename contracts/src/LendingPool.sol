@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -18,6 +19,7 @@ import {IReserveManager} from "./ReserveManager.sol";
 ///         市场 0 由构造注册（默认 USDC）、抵押品 0 为原生 ETH；不带市场/抵押参数的
 ///         动作与视图默认绑定市场 0 / ETH，行为与 V1 完全一致（存量测试/前端语义不变）。
 contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     uint256 public constant WAD = 1e18;
     uint256 public constant MAX_TIERS = 5;
     uint256 public constant MAX_MARKETS = 8;
@@ -483,7 +485,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         userShares[msg.sender][marketId] += shares;
         m.totalShares += shares;
         m.cash += amount;
-        require(m.asset.transferFrom(msg.sender, address(this), amount), "transfer failed");
+        m.asset.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     function _withdrawCore(uint8 marketId, uint256 shares) internal returns (uint256 amount) {
@@ -496,7 +498,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         userShares[msg.sender][marketId] -= shares;
         m.totalShares -= shares;
         m.cash -= amount;
-        require(m.asset.transfer(msg.sender, amount), "transfer failed");
+        m.asset.safeTransfer(msg.sender, amount);
     }
 
     function _supplyCollateralCore(uint8 collId, uint256 amount) internal returns (uint8) {
@@ -504,9 +506,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         require(amount >= _minCollateral(collId), "value below min");
         userCollateral[msg.sender][collId] += amount;
         if (_collaterals[collId].token != ETH) {
-            require(
-                IERC20(_collaterals[collId].token).transferFrom(msg.sender, address(this), amount), "transfer failed"
-            );
+            IERC20(_collaterals[collId].token).safeTransferFrom(msg.sender, address(this), amount);
         }
         return collId;
     }
@@ -525,7 +525,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         if (_collaterals[collId].token == ETH) {
             _safeSendEth(payable(msg.sender), amount);
         } else {
-            require(IERC20(_collaterals[collId].token).transfer(msg.sender, amount), "transfer failed");
+            IERC20(_collaterals[collId].token).safeTransfer(msg.sender, amount);
         }
     }
 
@@ -559,7 +559,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         }
         newLtv = newDebtWad * WAD / _collateralValueWad(msg.sender);
         healthFactor = _healthFactor(msg.sender, newDebtWad);
-        require(m.asset.transfer(msg.sender, amount), "transfer failed");
+        m.asset.safeTransfer(msg.sender, amount);
     }
 
     function _repayCore(uint8 marketId, uint256 amount) internal returns (uint256 repayAmount, uint256 remainingDebt) {
@@ -594,7 +594,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             if (!_anyBorrow(msg.sender)) userGlobalTier[msg.sender] = 0;
             remainingDebt = _debtValueWad(msg.sender);
         }
-        require(m.asset.transferFrom(msg.sender, address(this), repayAmount), "transfer failed");
+        m.asset.safeTransferFrom(msg.sender, address(this), repayAmount);
     }
 
     function _liquidateCore(uint8 marketId, address target, uint8 collId, uint256 debtToCover, uint256 minSeizeAmount)
@@ -649,11 +649,11 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         } else {
             postHf = _healthFactor(target, _debtValueWad(target));
         }
-        require(m.asset.transferFrom(msg.sender, address(this), coverAmount), "transfer failed");
+        m.asset.safeTransferFrom(msg.sender, address(this), coverAmount);
         if (_collaterals[collId].token == ETH) {
             _safeSendEth(payable(msg.sender), seizeAmount);
         } else {
-            require(IERC20(_collaterals[collId].token).transfer(msg.sender, seizeAmount), "transfer failed");
+            IERC20(_collaterals[collId].token).safeTransfer(msg.sender, seizeAmount);
         }
     }
 
@@ -675,14 +675,8 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         uint256 newSupplyIndex = oldSupplyIndex;
         uint256 remaining = lossToDepositors;
         if (remaining > 0) {
-            uint256 supplyBefore = _totalSupplyToken(marketId);
-            if (supplyBefore > 0) {
-                uint256 absorbed = remaining >= supplyBefore ? supplyBefore : remaining;
-                newSupplyIndex =
-                    absorbed >= supplyBefore ? 0 : oldSupplyIndex * (supplyBefore - absorbed) / supplyBefore;
-                m.supplyIndex = newSupplyIndex;
-                remaining -= absorbed;
-            }
+            // 吸收顺序 = 物理储备(已覆盖) → 账面风险储备 → treasury → 存款人(supplyIndex) 最后兜底
+            // （与“风险储备=第一损失缓冲”的产品语义一致，审计 D1 修复）
             if (remaining > 0 && m.totalReserve > 0) {
                 uint256 absorbed = remaining >= m.totalReserve ? m.totalReserve : remaining;
                 m.totalReserve -= absorbed;
@@ -692,6 +686,16 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
                 uint256 absorbed = remaining >= m.treasuryAccrued ? m.treasuryAccrued : remaining;
                 m.treasuryAccrued -= absorbed;
                 remaining -= absorbed;
+            }
+            if (remaining > 0) {
+                uint256 supplyBefore = _totalSupplyToken(marketId);
+                if (supplyBefore > 0) {
+                    uint256 absorbed = remaining >= supplyBefore ? supplyBefore : remaining;
+                    newSupplyIndex =
+                        absorbed >= supplyBefore ? 0 : oldSupplyIndex * (supplyBefore - absorbed) / supplyBefore;
+                    m.supplyIndex = newSupplyIndex;
+                    remaining -= absorbed;
+                }
             }
         }
 
@@ -714,7 +718,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         require(amount > 0, "no reserve");
         m.totalReserve -= amount;
         m.cash -= amount;
-        require(m.asset.transfer(address(reserveManager), amount), "transfer failed");
+        m.asset.safeTransfer(address(reserveManager), amount);
     }
 
     function _collectTreasuryCore(uint8 marketId) internal returns (uint256 amount, address to) {
@@ -726,7 +730,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         m.treasuryAccrued = 0;
         m.cash -= amount;
         to = treasuryAddress;
-        require(m.asset.transfer(to, amount), "transfer failed");
+        m.asset.safeTransfer(to, amount);
     }
 
     // ==================== Accrual ====================

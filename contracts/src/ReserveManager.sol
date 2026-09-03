@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IReserveManager {
@@ -12,6 +13,7 @@ interface IReserveManager {
 /// @notice 储备管理器（V2 多市场版）。储备按 token 分别存放/覆盖；首个 token（构造传入）为默认 token，
 ///         提供 balance()/coverBadDebt(uint256) 便捷接口（兼容 V1 调用）。
 contract ReserveManager is Ownable, IReserveManager {
+    using SafeERC20 for IERC20;
     IERC20 public immutable defaultToken;
     address public lendingPool;
 
@@ -44,7 +46,7 @@ contract ReserveManager is Ownable, IReserveManager {
         require(amount > 0, "amount=0");
         require(token != address(0), "zero token");
         emit BadDebtCovered(token, amount);
-        require(IERC20(token).transfer(lendingPool, amount), "transfer failed");
+        IERC20(token).safeTransfer(lendingPool, amount);
     }
 
     function balanceOf(address token) external view returns (uint256) {

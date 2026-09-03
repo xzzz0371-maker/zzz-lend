@@ -53,7 +53,7 @@ contract SecurityFixesTest is BaseSetup {
         assertGt(debt, supply); // 债务 > 净资产 → 全额传导
         vm.prank(address(0xdead));
         pool.handleBadDebt(alice, 0);
-        assertEq(pool.supplyIndex(), 0);
+        assertLt(pool.supplyIndex(), 1e17); // D1后储备优先兜底，存款人残余极小
         assertGt(pool.cash(), 100e6);
     }
 
@@ -185,13 +185,13 @@ contract SecurityFixesTest is BaseSetup {
 
     function test_F2_ExcessLossConservationHolds() public {
         _wipeDepositors();
-        assertEq(pool.supplyIndex(), 0);
+        assertLt(pool.supplyIndex(), 1e17); // D1后储备优先兜底，存款人残余极小
         assertTrue(_conserved(), "conservation broken after excess loss");
     }
 
     function test_F2_NoDepositorsConservationHolds() public {
         _wipeDepositors();
-        assertEq(pool.getTotalSupply(), 0);
+        assertLt(pool.getTotalSupply(), 1e9); // D1后储备优先兜底，存款人残余极小
         // 无存款人时再出现坏账：损失由账面储备/Treasury 兜底，守恒仍成立
         oracle.setPrice(ETH, 3000e8); // 重置价格供 carol 借款
         address carol = makeAddr("carol");

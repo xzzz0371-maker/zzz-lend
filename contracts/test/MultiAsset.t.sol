@@ -431,4 +431,29 @@ contract MultiAssetTest is BaseSetupV2 {
         _assertMarketConservationApprox(M_USDT, 1e6);
         _assertMarketConservationApprox(M_DAI, 1e15);
     }
+
+    /// @notice USDT/DAI 脱锚只影响自身市场债务计价，不污染其它市场守恒/全局 tier。
+    function test_UsdtDaiPegIsolation() public {
+        _supply(bob, 200_000e6);
+        _supplyMarket(address(usdt), M_USDT, bob, 200_000e6);
+        _supplyMarket(address(dai), M_DAI, bob, 200_000e18);
+        _supplyCollateral(alice, 2 ether); // 6000
+        _borrowMarket(M_USDT, alice, 500e6, 1); // 借 500 USDT
+        _borrowMarket(M_DAI, alice, 500e18, 1); // 借 500 DAI（同 tier1）
+        uint256 hf1 = pool.getUserHealthFactor(alice);
+        // USDT 脱锚到 0.9
+        oracle.setPrice(address(usdt), 9e7);
+        uint256 hfUsdtDrop = pool.getUserHealthFactor(alice);
+        // USDT 债务美元价值下降 → 总债务降 → HF 升（该市场独立计价）
+        assertGt(hfUsdtDrop, hf1);
+        _assertMarketConservation(M_USDC);
+        _assertMarketConservation(M_USDT);
+        _assertMarketConservation(M_DAI);
+        // DAI 溢价 1.1：债务美元价值上升 → HF 降（DAI 市场独立）
+        oracle.setPrice(address(usdt), 1e8);
+        oracle.setPrice(address(dai), 11e7);
+        uint256 hfDaiPremium = pool.getUserHealthFactor(alice);
+        assertLt(hfDaiPremium, hf1);
+        _assertMarketConservation(M_DAI);
+    }
 }

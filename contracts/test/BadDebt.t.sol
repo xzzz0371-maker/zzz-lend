@@ -79,15 +79,17 @@ contract BadDebtTest is BaseSetup {
 
         uint256 supplyIndexBefore = pool.supplyIndex();
         uint256 supplyBefore = pool.getTotalSupply();
+        uint256 treasuryBefore = pool.treasuryAccrued(); // 上交付款人之前由 treasury 吸收
         vm.prank(address(0xdead));
         pool.handleBadDebt(alice, 0);
 
-        assertEq(reserveManager.balance(), 0); // 储备耗尽
+        assertEq(reserveManager.balance(), 0); // 物理储备耗尽
         uint256 covered6 = reserveSeeded;
         uint256 loss6 = badDebt - covered6;
+        uint256 depositorLoss6 = loss6 > treasuryBefore ? loss6 - treasuryBefore : 0;
         assertGt(loss6, 0);
         assertLt(pool.supplyIndex(), supplyIndexBefore);
-        assertApproxEqAbs(pool.getTotalSupply(), supplyBefore - loss6, 1e6);
+        assertApproxEqAbs(pool.getTotalSupply(), supplyBefore - depositorLoss6, 1e6);
         _assertInvariant();
     }
 
