@@ -6,7 +6,7 @@ import { useAccount, useWriteContract } from "wagmi";
 import { LendingPoolAbi, MockTokenAbi } from "@/lib/abis";
 import { ADDRESSES, MAX_UINT, TX_GAS, type MarketInfo } from "@/lib/config";
 import { useUserPositionV2, useTokenAllowance, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
-import { formatToken, numToRaw, rawToNum, formatHealthFactor } from "@/lib/format";
+import { formatToken, numToRaw, formatHealthFactor, rawToDisplayString } from "@/lib/format";
 import { TxStatus } from "./TxStatus";
 
 export function RepayTab({ market }: { market: MarketInfo }) {
@@ -24,10 +24,13 @@ export function RepayTab({ market }: { market: MarketInfo }) {
 
   const debtRaw = position ? position.marketDebt[market.id] ?? 0n : 0n;
   const amountNum = parseFloat(amount);
-  const raw = numToRaw(amountNum, market.decimals);
+  const parsedRaw = numToRaw(amountNum, market.decimals);
+  // 精确/浮点超过真实债务时钳制到债务本身，避免“Max 后还不了”
+  const raw = parsedRaw > debtRaw ? debtRaw : parsedRaw;
   const needApproval = raw > 0n && allowance < raw;
   const valid = raw > 0n && raw <= debtRaw;
   const remaining = debtRaw > raw ? debtRaw - raw : 0n;
+  const tinyDec = debtRaw < 10n ** BigInt(Math.max(0, market.decimals - 4)) ? 8 : 2;
 
   return (
     <div className="space-y-4">
@@ -43,19 +46,19 @@ export function RepayTab({ market }: { market: MarketInfo }) {
           />
           <button
             className="btn-outline whitespace-nowrap"
-            onClick={() => setAmount(rawToNum(debtRaw, market.decimals).toString())}
+            onClick={() => setAmount(rawToDisplayString(debtRaw, market.decimals))}
           >
             Max
           </button>
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          Current debt: {formatToken(debtRaw, market.decimals)} {market.symbol}
+          Current debt: {formatToken(debtRaw, market.decimals, tinyDec)} {market.symbol}
         </p>
       </div>
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Remaining debt after</span>
         <span className="text-slate-800">
-          {formatToken(remaining, market.decimals)} {market.symbol}
+          {formatToken(remaining, market.decimals, tinyDec)} {market.symbol}
         </span>
       </div>
       <div className="flex justify-between text-sm">

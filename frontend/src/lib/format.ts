@@ -12,6 +12,14 @@ export function numToRaw(n: number, decimals = 6): bigint {
   return BigInt(Math.floor(n * Number(POW10(decimals))));
 }
 
+// Convert a raw token amount to an exact decimal string (no float loss) for inputs like "Max".
+export function rawToDisplayString(raw: bigint, decimals = 6): string {
+  const d = POW10(decimals);
+  const int = raw / d;
+  const frac = (raw % d).toString().padStart(decimals, "0");
+  return frac === "0".repeat(decimals) ? int.toString() : `${int}.${frac}`;
+}
+
 export function formatToken(raw: bigint | number | undefined | null, decimals = 6, dec = 2): string {
   if (raw === undefined || raw === null) return "--";
   return formatAmount(Number(raw) / Number(POW10(decimals)), dec);
