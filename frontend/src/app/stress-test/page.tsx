@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { type Address } from "viem";
 import { useAccount } from "wagmi";
-import { TIERS } from "@/lib/config";
-import { useUserPosition, usePoolStats, usePrices } from "@/lib/hooks";
+import { TIERS, BORROW_MARKETS } from "@/lib/config";
+import { useUserPosition, useMarketStats, usePrices } from "@/lib/hooks";
 import { CountUp } from "@/components/CountUp";
 
 const DROPS = [10, 20, 30, 40, 50];
@@ -24,8 +24,10 @@ const HEAT: Record<string, { bg: string; text: string; label: string }> = {
 export default function StressTestPage() {
   const { address, isConnected } = useAccount();
   const { position } = useUserPosition(address as Address);
-  const { stats } = usePoolStats();
   const { ethUsd } = usePrices();
+  const s0 = useMarketStats(0);
+  const s1 = useMarketStats(1);
+  const s2 = useMarketStats(2);
   const [drop, setDrop] = useState(30);
 
   const collateralEth = position ? Number(position.collateral) / 1e18 : 10;
@@ -41,12 +43,19 @@ export default function StressTestPage() {
   const status = statusOf(hfAfter);
   const estLoss = status === "liquidatable" ? Math.max(0, debtUsdc - collateralUsdAfter) : 0;
 
-  const reserveCoverage =
-    stats && Number(stats.totalBorrows) > 0 ? (Number(stats.totalReserve) / Number(stats.totalBorrows)) * 100 : 0;
-  const poolBorrowUsd = stats ? Number(stats.totalBorrows) / 1e6 : 0;
-  const poolCollateralAfter = poolBorrowUsd * 2 * (1 - drop / 100);
-  const poolShortfall = Math.max(0, poolBorrowUsd - poolCollateralAfter * 0.78);
-  const depositorLossPct = poolBorrowUsd > 0 ? Math.min(100, (poolShortfall / poolBorrowUsd) * 100) : 0;
+  const markets = [s0, s1, s2];
+  const reserveUsd = markets.reduce(
+    (sum, s, i) => sum + Number(s.stats?.reserve ?? 0n) / Math.pow(10, BORROW_MARKETS[i].decimals),
+    0,
+  );
+  const borrowUsd = markets.reduce(
+    (sum, s, i) => sum + Number(s.stats?.borrows ?? 0n) / Math.pow(10, BORROW_MARKETS[i].decimals),
+    0,
+  );
+  const reserveCoverage = borrowUsd > 0 ? (reserveUsd / borrowUsd) * 100 : 0;
+  const poolCollateralAfter = borrowUsd * 2 * (1 - drop / 100);
+  const poolShortfall = Math.max(0, borrowUsd - poolCollateralAfter * 0.78);
+  const depositorLossPct = borrowUsd > 0 ? Math.min(100, (poolShortfall / borrowUsd) * 100) : 0;
 
   const table = useMemo(
     () =>
@@ -136,8 +145,8 @@ export default function StressTestPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <ResultCard label="Estimated loss if liquidated" value={estLoss} prefix="$" decimals={0} tone={estLoss > 0 ? "red" : "green"} big />
-        <ResultCard label="Reserve coverage" value={reserveCoverage} suffix="%" decimals={2} sub="of total borrows" />
-        <ResultCard label="Depositor loss estimate (pool)" value={depositorLossPct} prefix="~" suffix="%" decimals={1} tone={depositorLossPct > 0 ? "red" : "green"} big sub="demo — fund NAV can decline" />
+        <ResultCard label="Reserve coverage" value={reserveCoverage} suffix="%" decimals={2} sub="USDC+USDT+DAI reserves vs borrows (approx $1 each)" />
+        <ResultCard label="Depositor loss estimate (pool)" value={depositorLossPct} prefix="~" suffix="%" decimals={1} tone={depositorLossPct > 0 ? "red" : "green"} big sub="demo assumption: pool collateral ~= 2x borrows - fund NAV can decline" />
       </div>
 
       {/* Heatmap */}

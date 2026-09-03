@@ -8,14 +8,12 @@ import { ADDRESSES, MIN_BORROW, TIERS, COLLATERALS, COLLATERAL_TIER_LTV, COLLATE
 import { useUserPositionV2, useMarketStats, useMarketBorrowAprs, useAssetPrices, useInvalidateAllOnTxSuccess } from "@/lib/hooks";
 import { formatToken, formatHealthFactor, numToRaw, rawToNum } from "@/lib/format";
 import { borrowAprAt, borrowAprUpperPct } from "@/lib/rates";
-import { YieldBreakdown } from "@/components/YieldBreakdown";
 import { TxStatus } from "./TxStatus";
 
 export function BorrowTab({ market, initialTier }: { market: MarketInfo; initialTier: number }) {
   const { address } = useAccount();
   const [tier, setTier] = useState(initialTier);
   const [amount, setAmount] = useState("");
-  const [showBreakdown, setShowBreakdown] = useState(false);
   const { position } = useUserPositionV2(address as Address);
   const { stats } = useMarketStats(market.id);
   const borrowAprs = useMarketBorrowAprs(market.id);
@@ -65,8 +63,6 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
   const rangeHigh = borrowAprAt(Math.min(100, utilPct + 10), tier);
   const range7dLow = Math.max(0, rangeLow - 0.3);
   const range7dHigh = rangeHigh + 0.3;
-  const utilFactor = utilPct > 0 ? utilPct / 100 : 0.5;
-  const grossYield = borrowApr !== undefined ? borrowApr * utilFactor : undefined;
 
   return (
     <div className="space-y-4">
@@ -181,21 +177,6 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
           <span className="text-slate-500">Health Factor after</span>
           <span className="text-slate-800">{formatHealthFactor(projHfBig)}</span>
         </div>
-      </div>
-
-      {/* Yield breakdown */}
-      <div>
-        <button
-          className="text-sm font-medium text-accent hover:underline"
-          onClick={() => setShowBreakdown((v) => !v)}
-        >
-          {showBreakdown ? "▾" : "▸"} Yield breakdown (estimated)
-        </button>
-        {showBreakdown && grossYield !== undefined && (
-          <div className="mt-2 rounded-xl bg-white/60 p-3 ring-1 ring-slate-200/60">
-            <YieldBreakdown gross={grossYield} />
-          </div>
-        )}
       </div>
 
       {address && !valid && !isPending && (
