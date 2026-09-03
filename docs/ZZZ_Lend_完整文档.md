@@ -441,25 +441,25 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 
 > **部署者始终是最终管理者**（DEFAULT_ADMIN 未移交 + 未撤销构造器角色）。测试网可接受；生产必须移交多签并撤销部署者角色。TESTNET_ADMIN 缺省=部署者。
 
-## 6.7 已部署地址回填表（Sepolia · 2026-09-03 第三次部署 · 含全额还款一次清零修复）
+## 6.7 已部署地址回填表（Sepolia · 2026-09-03 第四次部署 · D1+SafeERC20 上链）
 
-| 合约/资产 | 地址 | 验证状态 |
-|---|---|---|
-| MockUSDC | `0x516AE43A2599FEAD583D7A5A2b5e5aD3BDf7a1e9` | ✅ 已部署 |
-| USDT（Mock，6dp） | `0x4187F1Cae105bBCAdD440d6020eD559D00d0F15b` | ✅ 已部署 |
-| DAI（Mock，18dp） | `0xb449b1DC9e984dE60697C84EB031dC28aB88c5Cd` | ✅ 已部署 |
-| wstETH（Mock，18dp） | `0xab1c6Af1bdE0008fA89D8140A7d0C668E1449350` | ✅ 已部署 |
-| WBTC（Mock，8dp） | `0x9Aa268b64a03e9B464aB8147a37011703A4DA26b` | ✅ 已部署 |
-| ChainlinkOracle | `0xC48410cB83eE13389460c9aF624FA376F1d07AFc` | ✅ 已部署 |
-| SwitchableOracle | `0x487EC0f5bdDc35F5d4163CceDAceF6476E7b6Ee8` | ✅ 已部署（可设价演示中） |
-| InterestRateModel | `0xb9c152c5721982756732e8F25B4BD92A678c66F1` | ✅ NORMAL 三段：80/85/100 → 3.70/4.95/12.45% 链上验证 |
-| RiskManager | `0x237dE22c5CA8f68b450BD1235264ee444836dba4` | ✅ 已部署 |
-| LiquidationManager | `0x818fe698b8911D732E4335E22f66EcEb56262261` | ✅ 已部署 |
-| ReserveManager | `0xE0D850d7fBeE2962B1ed5a1c6a43f5A20dc092C2` | ✅ 已部署 |
-| RiskEngine | `0xB1213e0f52efFbe88f2a6e0f610fC428090DCB0e` | ✅ 已部署 |
-| LendingPool | `0xc66670B9809FafB5F560c89C52808904815F9481` | ✅ **含全额还款一次清零修复** |
+| 合约/资产 | 地址 |
+|---|---|
+| MockUSDC | `0xdB7AB189c128c3c1b687751666519c92fa278691` |
+| USDT（6dp） | `0x5218868b9A719ba6Fc6c18B3E47358627bDBDe5B` |
+| DAI（18dp） | `0x9999A90A3c616CD5447eC6B1b3Db5cB7AF13ABe1` |
+| wstETH（18dp） | `0xeb6f12c85a6E0351EA161408e4E4d60c60932189` |
+| WBTC（8dp） | `0x8DACB22bd513c45579E837747B3AAF4193fF73Df` |
+| ChainlinkOracle | `0x16b70D7f17aA292079bf7D71153f1800330B7b95` |
+| SwitchableOracle | `0x2c662a37E91D37A98416f701b6651CcD123B374D` |
+| InterestRateModel | `0x3955a86C79FE55981F6cd75b2d0D1c11370adca0` |
+| RiskManager | `0x6F06892Ac18414Fe3cA35534344B710591f1238d` |
+| LiquidationManager | `0x97a18090D7361a6bcD3dA0d15B16Fe655964Bc9c` |
+| ReserveManager | `0x4262b74f6FBae0E00479fAfc0f2cabdFCe390BE1` |
+| RiskEngine | `0xAe5Da87364A0f4ea8dce1C39ccE74D8B70C8d15B` |
+| LendingPool | `0x7BAc282Cb271CBe686D31aeFC9d776Be49C78E8c` |
 
-> 部署记录（2026-09-03 第三次，替代当日前的地址）：为让**“Max 一次还清（修复 floor 取整尘埃）”** 生效整组重部署（不可升级，无 proxy）。演示已播种：USDC 20000 / USDT 10000 / DAI 520 供应 + 三市场各借 100（0.15 ETH 抵押，tier3）+ 可设价价格 + treasuryAddress 已设；`marketAccounts(0/1/2)` 均有数据。**旧池 `0x8c38…`（2026-09-02 部署）已归档**：其内的演示/测试资产仍在旧地址，如仍需取回可直连旧地址交互（网站现指向新池）。
+> 部署记录（2026-09-03 第四次）：**D1（坏账：账面储备/treasury 先于存款人吸收，储备=第一损失）与 M1（全部 ERC20 走 SafeERC20）已在链上生效**；另含“Max 一次还清”修复（第三次已上）。演示已播种（USDC 10000 / USDT 5000 / DAI 10000 供应 + 0.01 ETH 抵押），价格可设价、treasuryAddress 已设。此前各次池（`0x8c38…`、`0xc666…` 等）已归档，地址仅存档不再被站点引用。测试：25 suites / 189 passed（含 D1 顺序回归 + peg 隔离）。
 
 ## 6.8 cast 命令速查
 
@@ -604,4 +604,10 @@ cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $D
 - `RiskEngine.calculateRiskLevelAuto` 基于默认 USDC 市场读数（市场0）；多市场逐一评估为后续增强项。
 - 待办：主网真实 feed/权限收口/外部审计；每市场 reserve/treasury 提取通用化；前端 DOM 实测截图与链上 E2E 结果回填 §4/§6.7。
 
-*本文档为项目唯一总文档（原分阶段文档已并入后删除）。V2 多资产附录完（2026-09-02）。*
+*本文档为项目唯一总文档（原分阶段文档已并入后删除）。
+
+## 9.7 主网上线前置（GO/NO-GO，截至 2026-09-03）
+1. 代码层（已完成）：D1 坏账顺序、SafeERC20、全额还款一次清零、三段利率、多市场隔离、189 测试/不变式/fuzz/Slither0。
+2. 未完成（需外部资源/治理）：外部第三方审计；主网真实 feed（含 wstETH 合成）并移除 Mock/可设价；多签+Timelock 并撤销部署者；事件/索引（Subgraph）+清算监控告警；坏账前提取公平性策略；代币接入白名单与供应/抵押上限风控；真实历史 APY。
+3. 门槛：2 全部落地 + 全量回归通过后再评审上主网。
+V2 多资产附录完（2026-09-02）。*
