@@ -570,18 +570,30 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         require(t > 0, "no debt");
         uint256 debt = (userBorrowNorm[msg.sender][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
         repayAmount = amount == type(uint256).max ? debt : (amount < debt ? amount : debt);
-        uint256 normReduction = repayAmount * WAD / m.borrowIndexByTier[t];
-        if (normReduction > userBorrowNorm[msg.sender][marketId]) normReduction = userBorrowNorm[msg.sender][marketId];
-        userBorrowNorm[msg.sender][marketId] -= normReduction;
-        m.totalNormalizedByTier[t] -= normReduction;
-        if (userBorrowNorm[msg.sender][marketId] <= DUST_THRESHOLD) {
+        if (repayAmount >= debt) {
+            // 全额还清：一次性清零（避免 floor 取整残留“还了一次还要还尾巴”）。
             m.totalNormalizedByTier[t] -= userBorrowNorm[msg.sender][marketId];
             userBorrowNorm[msg.sender][marketId] = 0;
             userTier[msg.sender][marketId] = 0;
+            if (!_anyBorrow(msg.sender)) userGlobalTier[msg.sender] = 0;
+            m.cash += repayAmount;
+            remainingDebt = 0;
+        } else {
+            uint256 normReduction = repayAmount * WAD / m.borrowIndexByTier[t];
+            if (normReduction > userBorrowNorm[msg.sender][marketId]) {
+                normReduction = userBorrowNorm[msg.sender][marketId];
+            }
+            userBorrowNorm[msg.sender][marketId] -= normReduction;
+            m.totalNormalizedByTier[t] -= normReduction;
+            if (userBorrowNorm[msg.sender][marketId] <= DUST_THRESHOLD) {
+                m.totalNormalizedByTier[t] -= userBorrowNorm[msg.sender][marketId];
+                userBorrowNorm[msg.sender][marketId] = 0;
+                userTier[msg.sender][marketId] = 0;
+            }
+            m.cash += repayAmount;
+            if (!_anyBorrow(msg.sender)) userGlobalTier[msg.sender] = 0;
+            remainingDebt = _debtValueWad(msg.sender);
         }
-        m.cash += repayAmount;
-        if (!_anyBorrow(msg.sender)) userGlobalTier[msg.sender] = 0;
-        remainingDebt = _debtValueWad(msg.sender);
         require(m.asset.transferFrom(msg.sender, address(this), repayAmount), "transfer failed");
     }
 

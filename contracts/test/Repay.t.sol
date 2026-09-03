@@ -93,4 +93,24 @@ contract RepayTest is BaseSetup {
         uint256 rhs = pool.getTotalSupply() + pool.totalReserve() + pool.treasuryAccrued();
         assertTrue(lhs >= rhs ? (lhs - rhs) <= 1e6 : (rhs - lhs) <= 1e6, "invariant broken");
     }
+
+    /// @notice 全额还款必须一次清零：计息后 debt>principal，repay(max) 后不得残留取整尘埃。
+    function test_FullRepayClearsAccruedDebtInOneGo() public {
+        _supply(bob, 200_000e6);
+        _supplyCollateral(alice, 1 ether);
+        _borrow(alice, 100e6, 1);
+        vm.warp(block.timestamp + 365 days);
+        pool.accrue();
+        uint256 debtBefore = pool.getDebt(alice);
+        assertGt(debtBefore, 100e18); // 有利息
+
+        _approveUsdc(alice, type(uint256).max);
+        vm.prank(alice);
+        pool.repay(0, type(uint256).max);
+
+        assertEq(pool.userDebtToken(alice, 0), 0);
+        assertEq(uint256(pool.userGlobalTier(alice)), 0);
+        assertEq(pool.getDebt(alice), 0);
+        _assertInvariant();
+    }
 }
