@@ -441,25 +441,25 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 
 > **部署者始终是最终管理者**（DEFAULT_ADMIN 未移交 + 未撤销构造器角色）。测试网可接受；生产必须移交多签并撤销部署者角色。TESTNET_ADMIN 缺省=部署者。
 
-## 6.7 已部署地址回填表（Sepolia · 2026-09-03 第四次部署 · D1+SafeERC20 上链）
+## 6.7 已部署地址回填表（Sepolia · 2026-09-03 第五次部署 · 正确 D1 顺序上链）
 
 | 合约/资产 | 地址 |
 |---|---|
-| MockUSDC | `0xdB7AB189c128c3c1b687751666519c92fa278691` |
-| USDT（6dp） | `0x5218868b9A719ba6Fc6c18B3E47358627bDBDe5B` |
-| DAI（18dp） | `0x9999A90A3c616CD5447eC6B1b3Db5cB7AF13ABe1` |
-| wstETH（18dp） | `0xeb6f12c85a6E0351EA161408e4E4d60c60932189` |
-| WBTC（8dp） | `0x8DACB22bd513c45579E837747B3AAF4193fF73Df` |
-| ChainlinkOracle | `0x16b70D7f17aA292079bf7D71153f1800330B7b95` |
-| SwitchableOracle | `0x2c662a37E91D37A98416f701b6651CcD123B374D` |
-| InterestRateModel | `0x3955a86C79FE55981F6cd75b2d0D1c11370adca0` |
-| RiskManager | `0x6F06892Ac18414Fe3cA35534344B710591f1238d` |
-| LiquidationManager | `0x97a18090D7361a6bcD3dA0d15B16Fe655964Bc9c` |
-| ReserveManager | `0x4262b74f6FBae0E00479fAfc0f2cabdFCe390BE1` |
-| RiskEngine | `0xAe5Da87364A0f4ea8dce1C39ccE74D8B70C8d15B` |
-| LendingPool | `0x7BAc282Cb271CBe686D31aeFC9d776Be49C78E8c` |
+| MockUSDC | `0x54dE52C8F197A504F7B18F2AaAA77454C27FDD5E` |
+| USDT（6dp） | `0x8Ecf7C345266aF5fc002c491e608530C917756CB` |
+| DAI（18dp） | `0xb241519DAEC4aCBF294D59E7D24A2762dBd434EC` |
+| wstETH（18dp） | `0xeA1d9f57537eB74114A47812b2D944CaBA6C152E` |
+| WBTC（8dp） | `0x5a8026c320c1c337526A5a99C9D0D2b7c001e91B` |
+| ChainlinkOracle | `0x355C32E63657E7aE6dFd5A03B8c77Ea38e58D944` |
+| SwitchableOracle | `0x2506F626366b441437b096DDCF4AE98efd4d1446` |
+| InterestRateModel | `0x1ADDA1A8B0C09DF6A7bC4379CDd2B88Ef31552E3` |
+| RiskManager | `0xF1f9672ad8285DB29d63Af1DA4563Fe45Ec1E7b3` |
+| LiquidationManager | `0xF8485e8fDD20F3E0141E4d95BF39150d4F7Fac7C` |
+| ReserveManager | `0x8e06d57c2296224bCD48DE36B8BC4140555B5feB` |
+| RiskEngine | `0x2E4F4Cd71D3230eb0f08abfbD1a669e55eB4D701` |
+| LendingPool | `0xA958E9Ab95CEaFF5f341947824bA2237745Ec07D` |
 
-> 部署记录（2026-09-03 第四次）：M1（全部 ERC20 走 SafeERC20）与“Max 一次还清”修复已在链上；D1 顺序当时误按“treasury 先于存款人”部署，已于 2026-09-03 按“物理→账面→存款人→Treasury 最后”修正代码，待第 5 次部署生效。演示已播种（USDC 10000 / USDT 5000 / DAI 10000 供应 + 0.01 ETH 抵押），价格可设价、treasuryAddress 已设。此前各次池（`0x8c38…`、`0xc666…` 等）已归档，地址仅存档不再被站点引用。测试：25 suites / 189 passed（含 D1 顺序回归 + peg 隔离）。
+> 部署记录（2026-09-03 第五次）：**D1 坏账吸收顺序按“物理储备→账面储备→存款人(supplyIndex)→Treasury 最后兜底”修正后已上链**；SafeERC20 与“Max 一次还清”亦在链上。演示已播种（USDC 5000 / USDT 3000 / DAI 15000 供应 + 0.01 ETH 抵押 + 可设价价格 + treasuryAddress）。测试：25 suites / 189 passed（含 D1 顺序回归、全额还款、peg 隔离）。历史部署池（`0x8c38…`/`0xc666…`/`0x7BAc…`）均已归档。
 
 ## 6.8 cast 命令速查
 
