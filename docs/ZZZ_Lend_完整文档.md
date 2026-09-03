@@ -459,7 +459,7 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 | RiskEngine | `0xAe5Da87364A0f4ea8dce1C39ccE74D8B70C8d15B` |
 | LendingPool | `0x7BAc282Cb271CBe686D31aeFC9d776Be49C78E8c` |
 
-> 部署记录（2026-09-03 第四次）：**D1（坏账：账面储备/treasury 先于存款人吸收，储备=第一损失）与 M1（全部 ERC20 走 SafeERC20）已在链上生效**；另含“Max 一次还清”修复（第三次已上）。演示已播种（USDC 10000 / USDT 5000 / DAI 10000 供应 + 0.01 ETH 抵押），价格可设价、treasuryAddress 已设。此前各次池（`0x8c38…`、`0xc666…` 等）已归档，地址仅存档不再被站点引用。测试：25 suites / 189 passed（含 D1 顺序回归 + peg 隔离）。
+> 部署记录（2026-09-03 第四次）：M1（全部 ERC20 走 SafeERC20）与“Max 一次还清”修复已在链上；D1 顺序当时误按“treasury 先于存款人”部署，已于 2026-09-03 按“物理→账面→存款人→Treasury 最后”修正代码，待第 5 次部署生效。演示已播种（USDC 10000 / USDT 5000 / DAI 10000 供应 + 0.01 ETH 抵押），价格可设价、treasuryAddress 已设。此前各次池（`0x8c38…`、`0xc666…` 等）已归档，地址仅存档不再被站点引用。测试：25 suites / 189 passed（含 D1 顺序回归 + peg 隔离）。
 
 ## 6.8 cast 命令速查
 

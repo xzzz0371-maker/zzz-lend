@@ -675,16 +675,10 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         uint256 newSupplyIndex = oldSupplyIndex;
         uint256 remaining = lossToDepositors;
         if (remaining > 0) {
-            // 吸收顺序 = 物理储备(已覆盖) → 账面风险储备 → treasury → 存款人(supplyIndex) 最后兜底
-            // （与“风险储备=第一损失缓冲”的产品语义一致，审计 D1 修复）
+            // 吸收顺序（审计 D1 修正）：物理储备(已覆盖) → 账面风险储备 → 存款人(supplyIndex) → Treasury 最后兜底
             if (remaining > 0 && m.totalReserve > 0) {
                 uint256 absorbed = remaining >= m.totalReserve ? m.totalReserve : remaining;
                 m.totalReserve -= absorbed;
-                remaining -= absorbed;
-            }
-            if (remaining > 0 && m.treasuryAccrued > 0) {
-                uint256 absorbed = remaining >= m.treasuryAccrued ? m.treasuryAccrued : remaining;
-                m.treasuryAccrued -= absorbed;
                 remaining -= absorbed;
             }
             if (remaining > 0) {
@@ -696,6 +690,11 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
                     m.supplyIndex = newSupplyIndex;
                     remaining -= absorbed;
                 }
+            }
+            if (remaining > 0 && m.treasuryAccrued > 0) {
+                uint256 absorbed = remaining >= m.treasuryAccrued ? m.treasuryAccrued : remaining;
+                m.treasuryAccrued -= absorbed;
+                remaining -= absorbed;
             }
         }
 
