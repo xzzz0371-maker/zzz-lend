@@ -49,8 +49,10 @@ contract AuditPocReserveOrder is BaseSetupV2 {
         console2.log("supplyIndexAfter:", supplyIndexAfter);
         console2.log("bookReserveAfter:", bookReserveAfter);
         console2.log(
-            "SUPPLYINDEX_DECREASED=", (supplyIndexAfter < supplyIndexBefore) ? "true" : "false",
-            " RESERVE_DEPLETED=", (bookReserveAfter < bookReserveMid) ? "true" : "false"
+            "SUPPLYINDEX_DECREASED=",
+            (supplyIndexAfter < supplyIndexBefore) ? "true" : "false",
+            " RESERVE_DEPLETED=",
+            (bookReserveAfter < bookReserveMid) ? "true" : "false"
         );
         _assertMarketConservationApprox(M_USDC, 1e15);
     }

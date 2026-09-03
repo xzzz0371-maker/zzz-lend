@@ -7,10 +7,10 @@
 ---
 
 ## 1. 当前状态（一句话）
-代码/测试层已到“可自闭环的主网准备就绪”，并已 5 次整组部署到 Sepolia（最新池带正确 D1 顺序）；**上主网仍有外部/治理前置项未完成（见 §4），当前不建议上主网**。
+代码/测试层已到“可自闭环的主网准备就绪”，并已 5 次整组部署到 Sepolia（最新池带正确 D1 顺序）；**上主网仍有外部/治理前置项未完成（见 §4），当前不建议上主网**。本轮（§3.1）两项本环境可继续事项已完成：主网就绪部署模板脚本 + 四组补强测试。
 
 ### 关键基线
-- 合约测试：**25 suites / 189 passed / 0 failed**
+- 合约测试：**29 suites / 215 passed / 0 failed**（新增 26：定向 fuzz 7、极值矩阵 4、坏账 front-run 快照 4、addMarket/admin 分支 11）
 - 工具：`forge test --fuzz-runs 5000` 通过；状态机不变式 4/4；Slither 39 合约/102 检测器 **0 findings**；coverage：LendingPool 行 ~93.97%
 - 合约尺寸：LendingPool ~20.6–21.4KB（< EIP-170 24576）
 - 前端：`npm run build` 通过，Cloudflare Pages 在线（静态导出，连 Sepolia 当前池）
@@ -58,12 +58,26 @@
 - `主网准备_本轮改动说明与遗留问题_2026-09-03.md`：本轮改动/做到位/遗留问题与不确定性
 - `接手指南.md`：V2 快速上手
 
+### 2.6 本轮新增：主网就绪部署模板（DeployMainnet.s.sol）
+- **参数化模板**：真实 Chainlink feed（逐资产 feed 地址）、多签（MAINNET_ADMIN=Owner/角色持有、MAINNET_TREASURY、可独立 MAINNET_PAUSER）、**默认禁 settable**（不部署 SwitchableOracle，池价格源直连 ChainlinkOracle）、token 白名单（ENABLE_* 开关 + 逐资产 token/feed 配置项）
+- 上链前**预检**：token/feed 非零、代码存在、feed decimals 匹配、answer>0、新鲜度 ≤2h；enabled 白名单资产缺配置即 revert
+- 角色收口：池/oracle/RiskEngine 三角色授给多签后**撤销部署者**；IRM/RM/ReserveManager `transferOwnership(多签)`
+- `.env.example` 已补主网变量注释；产物写 `deployments/mainnet.json`（区别于测试网 `sepolia.json`）
+
+### 2.7 本轮新增：四组补强测试（PROGRESS §3.1 收尾）
+| 文件 | 数 | 覆盖 |
+|---|---|---|
+| `DirectedFuzz.t.sol` | 7 | repay 部分/全额/跨市场边界 fuzz；liquidate closeFactor 封顶、seize 非零上限、跨市场(WBTC/USDT)、连续清算到清仓或坏账 |
+| `ExtremeMatrix.t.sol` | 4 | closeFactor 5/50/100%、bonus 0/5/20%、reserveTarget 0/1%/50%、6×2×2 多档下跌组合的自动矩阵（全新池逐场景，守恒+溢出断言，产物落 test-out/） |
+| `BadDebtFrontrunSnapshot.t.sol` | 4 | 坏账窗口 front-run 快照：抢先提款者逃损 vs 无人抢先按份分摊；快照恢复幂等；bank-run 受池现金上限约束 |
+| `AdminBranches.t.sol` | 11 | addMarket zero/ETH/越权/超 MAX_MARKETS(8)；addCollateral zero/超 MAX_COLLATERALS(8)；非法 marketId/collateral 全操作 revert；角色矩阵；reserveTarget=100% 边界 |
+
 ---
 
 ## 3. 未完成待办
-### 3.1 本环境可继续（≈1 轮）
-- Deploy 脚本“主网就绪”参数化模板（真实 feed / 多签 / 默认禁 settable / token 白名单配置项）
-- 补强测试：repay/liquidate 定向 fuzz、closeFactor/bonus/reserve 极值矩阵、坏账 front-run 快照、addMarket/admin 分支覆盖
+### 3.1 本环境可继续（已完成）
+- ✅ Deploy 脚本“主网就绪”参数化模板（真实 feed / 多签 / 默认禁 settable / token 白名单配置项）→ `script/DeployMainnet.s.sol`
+- ✅ 补强测试：repay/liquidate 定向 fuzz、closeFactor/bonus/reserve 极值矩阵、坏账 front-run 快照、addMarket/admin 分支覆盖 → 见 §2.7（29 suites / 215 passed）
 
 ### 3.2 外部 / 需决策（≈7 项，写入 §9.7）
 1. 外部第三方安全审计 + 修复回归

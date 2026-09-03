@@ -1,8 +1,8 @@
 # ZZZ Lend — 完整项目文档
 
 > **单一总文档**：汇总产品、架构、合约、阶段进度、测试、安全、部署与待办（原分阶段/交接/配置文档已并入后删除）。
-> 归总日期：2026-08-29（**V2 多资产更新：2026-09-02**）
-> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：23 suites / 184 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
+> 归总日期：2026-08-29（**V2 多资产更新：2026-09-02；测试补强/主网模板：2026-09-03**）
+> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：29 suites / 215 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
 > ⚠️ 本文档按 V1 单市场撰写；**多资产 V2 全部改动与新增资产表见第 9 章（2026-09-02）**，正文中冲突处以第 9 章为准。
 
 ---
@@ -292,10 +292,10 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 
 # 第 4 部分 测试体系与结果
 
-## 4.1 测试总览 — 2026-09-02（每次跑完测试更新本表日期/用例数）
+## 4.1 测试总览 — 2026-09-03（每次跑完测试更新本表日期/用例数）
 
 ```
-forge test:  23 suites, 184 passed, 0 failed, 0 skipped
+forge test:  29 suites, 215 passed, 0 failed, 0 skipped
 forge fmt --check: 通过
 ```
 
@@ -325,6 +325,10 @@ forge fmt --check: 通过
 | SecurityFixes.t.sol | 20 | 审计 v1.1 修复回归（F1 取整下溢 / F3 setPrice 校验 / F4 零地址 / F2 超额损失守恒 / F5 实时偏差 / F9 oracle 暂停清算）+ v1.2 最小金额限制（MIN_SUPPLY/MIN_BORROW/MIN_COLLATERAL） |
 | FeeMechanism.t.sol | 12 | 固定费率 94/4/2 合计100%；储备未达标无溢出/达标溢出转Treasury/恰达目标新增4%全溢出/坏账消耗储备后溢出停止/借款增减改变目标/totalBorrows=0 不溢出储备保留/collectTreasury 转账与零地址revert/溢出事件/参数边界 |
 | MinSeize.t.sol | 3 | minSeize 通过/不足 revert/0 不限制 |
+| **DirectedFuzz.t.sol** | 7 | **定向 fuzz**：repay 部分/全额/跨市场边界；liquidate closeFactor 封顶、seize 非零上限、跨市场(WBTC/USDT)、连续清算到清仓或坏账（全程守恒） |
+| **ExtremeMatrix.t.sol** | 4 | **参数极值矩阵**：closeFactor 5/50/100%、bonus 0/5/20%、reserveTarget 0/1%/50%、6 档下跌×closeFactor×bonus 组合（全新池逐场景，产物 `test-out/extreme_*_matrix.md`） |
+| **BadDebtFrontrunSnapshot.t.sol** | 4 | **坏账 front-run 快照**：窗口内抢先提款逃损 vs 无人抢先按份分摊；快照恢复幂等；bank-run 受池现金上限约束 |
+| **AdminBranches.t.sol** | 11 | **admin/注册分支**：addMarket zero/ETH/越权/超 MAX_MARKETS；addCollateral zero/超 MAX_COLLATERALS；非法 marketId/collateral 全操作 revert；角色矩阵；reserveTarget 边界 |
 | **BaseSetupV2.t.sol** | 基座 | 注册 USDT/DAI 市场 + wstETH/WBTC 抵押；oracle 价格与各资产档位；市场守恒（精确/容差）辅助 |
 | **MultiAsset.t.sol** | 18 | **V2 多资产**：每资产（USDT/DAI/wstETH/WBTC）supply/borrow/repay/withdraw/liquidate；精度/最小金额（6/8/18 位）；跨抵押合计能力与加权健康度；跨市场同 tier 借款与市场隔离；任意抵押×市场清算；逐市场坏账隔离与全局 tier 保留（回归）；双市场利率独立累计 |
 
@@ -459,7 +463,7 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 | RiskEngine | `0x2E4F4Cd71D3230eb0f08abfbD1a669e55eB4D701` |
 | LendingPool | `0xA958E9Ab95CEaFF5f341947824bA2237745Ec07D` |
 
-> 部署记录（2026-09-03 第五次）：**D1 坏账吸收顺序按“物理储备→账面储备→存款人(supplyIndex)→Treasury 最后兜底”修正后已上链**；SafeERC20 与“Max 一次还清”亦在链上。演示已播种（USDC 5000 / USDT 3000 / DAI 15000 供应 + 0.01 ETH 抵押 + 可设价价格 + treasuryAddress）。测试：25 suites / 189 passed（含 D1 顺序回归、全额还款、peg 隔离）。历史部署池（`0x8c38…`/`0xc666…`/`0x7BAc…`）均已归档。
+> 部署记录（2026-09-03 第五次）：**D1 坏账吸收顺序按“物理储备→账面储备→存款人(supplyIndex)→Treasury 最后兜底”修正后已上链**；SafeERC20 与“Max 一次还清”亦在链上。演示已播种（USDC 5000 / USDT 3000 / DAI 15000 供应 + 0.01 ETH 抵押 + 可设价价格 + treasuryAddress）。测试：29 suites / 215 passed（含 D1 顺序回归、全额还款、peg 隔离、定向 fuzz、极值矩阵、坏账 front-run 快照、admin 分支）。历史部署池（`0x8c38…`/`0xc666…`/`0x7BAc…`）均已归档。
 
 ## 6.8 cast 命令速查
 
@@ -607,7 +611,8 @@ cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $D
 *本文档为项目唯一总文档（原分阶段文档已并入后删除）。
 
 ## 9.7 主网上线前置（GO/NO-GO，截至 2026-09-03）
-1. 代码层（已完成）：D1 坏账顺序、SafeERC20、全额还款一次清零、三段利率、多市场隔离、189 测试/不变式/fuzz/Slither0。
-2. 未完成（需外部资源/治理）：外部第三方审计；主网真实 feed（含 wstETH 合成）并移除 Mock/可设价；多签+Timelock 并撤销部署者；事件/索引（Subgraph）+清算监控告警；坏账前提取公平性策略；代币接入白名单与供应/抵押上限风控；真实历史 APY。
-3. 门槛：2 全部落地 + 全量回归通过后再评审上主网。
+1. 代码层（已完成）：D1 坏账顺序、SafeERC20、全额还款一次清零、三段利率、多市场隔离、215 测试/不变式/fuzz/Slither0。
+2. 本环境可完成项（2026-09-03 已落地）：`script/DeployMainnet.s.sol` 主网就绪参数化模板（真实 feed/多签/默认禁 settable/token 白名单/上链预检）+ 定向 fuzz/参数极值矩阵/坏账 front-run 快照/admin 分支测试（见 PROGRESS §2.6/§2.7）。**该模板尚未在真实主网执行**。
+3. 未完成（需外部资源/治理）：外部第三方审计；主网真实 feed（含 wstETH 合成）并移除 Mock/可设价；多签+Timelock 并撤销部署者；事件/索引（Subgraph）+清算监控告警；坏账前提取公平性策略；代币接入白名单与供应/抵押上限风控；真实历史 APY。
+4. 门槛：3 全部落地 + 全量回归通过后再评审上主网。
 V2 多资产附录完（2026-09-02）。*

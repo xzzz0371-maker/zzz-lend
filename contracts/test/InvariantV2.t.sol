@@ -120,7 +120,9 @@ contract InvariantV2Test is Test {
     ) internal {
         uint256[5] memory ltv = [l1, l2, l3, l4, l5];
         uint256[5] memory lt = [t1, t2, t3, t4, t5];
-        for (uint256 i = 0; i < 5; i++) rm.setTier(token, i + 1, ltv[i], lt[i]);
+        for (uint256 i = 0; i < 5; i++) {
+            rm.setTier(token, i + 1, ltv[i], lt[i]);
+        }
     }
 
     // ==================== 不变式 ====================
@@ -140,8 +142,7 @@ contract InvariantV2Test is Test {
     }
 
     function invariant_conservation_dai() public view {
-        (uint256 cash, uint256 borrows, uint256 supply, uint256 reserve, uint256 treasury,) =
-            pool.marketAccounts(M_DAI);
+        (uint256 cash, uint256 borrows, uint256 supply, uint256 reserve, uint256 treasury,) = pool.marketAccounts(M_DAI);
         assertApproxEqAbs(cash + borrows, supply + reserve + treasury, 1e15, "DAI conservation broken");
     }
 
