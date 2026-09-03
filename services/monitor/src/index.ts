@@ -5,7 +5,7 @@ import type { Address } from "viem";
 
 import { init, loadDeployments } from "./rpc.js";
 import { checkPosition, snapshotMarket, utilization, reserveBalanceOf, assetPrice, describeHf, describeMarket } from "./checkers.js";
-import { AlertStore } from "./alerts.js";
+import { AlertStore, notifyWebhook, notifyTelegram } from "./alerts.js";
 import { appendLine, touchFile, nowIso, WAD } from "./util.js";
 
 interface PositionsCfg {
@@ -46,10 +46,15 @@ async function main() {
 
   const alertsFile = path.join(outDir, "alerts.log");
   const metricsFile = path.join(outDir, "metrics.jsonl");
+  const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgChat = process.env.TELEGRAM_CHAT_ID;
   const alerts = new AlertStore((a) => {
     const line = `[${a.at}] [${a.level}] ${a.message}`;
     console.log(line);
     appendLine(alertsFile, a);
+    notifyWebhook(webhookUrl, a);
+    notifyTelegram(tgToken, tgChat, a);
   });
 
   console.log(`monitor: pool=${pool} rm=${rm} oracle=${oracle} loop=${loop} interval=${pollSec}s`);
@@ -109,6 +114,7 @@ async function main() {
     }
 
     // ---- oracle sanity ----
+    // 抵押品 + 市场借贷币都检查喂价（市场币通常各有独立 feed）。
     for (const c of cfg.collaterals) {
       const px = await assetPrice(oracle, c.token);
       row[`oracle.${c.symbol}`] = px === null ? "stale/unavailable" : px.toString();
@@ -116,6 +122,15 @@ async function main() {
         alerts.set(`oracle-${c.symbol}`, "CRITICAL", true, `oracle price for ${c.symbol} unavailable/stale`);
       } else {
         alerts.set(`oracle-${c.symbol}`, "CRITICAL", false, "");
+      }
+    }
+    for (const m of cfg.markets) {
+      const px = await assetPrice(oracle, m.token);
+      row[`oracle.${m.symbol}`] = px === null ? "stale/unavailable" : px.toString();
+      if (px === null || px === 0n) {
+        alerts.set(`oracle-${m.symbol}`, "CRITICAL", true, `oracle price for ${m.symbol} unavailable/stale`);
+      } else {
+        alerts.set(`oracle-${m.symbol}`, "CRITICAL", false, "");
       }
     }
 

@@ -2,7 +2,7 @@
 
 > **单一总文档**：汇总产品、架构、合约、阶段进度、测试、安全、部署与待办（原分阶段/交接/配置文档已并入后删除）。
 > 归总日期：2026-08-29（**V2 多资产更新：2026-09-02；测试补强/主网模板/上限/Timelock/监控：2026-09-03**）
-> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：31 suites / 229 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
+> 新接手者先读 \docs/接手指南.md\（快速上手/关键实现/部署运维）。 ｜ 状态：阶段 7/8 已实现（2026-08-31/09-01）＋ **阶段 9 多资产 V2（2026-09-02，单池多市场：USDC/USDT/DAI 借贷 × ETH/wstETH/WBTC 抵押）已实现并部署 Sepolia**（见 `frontend/README.md`） ｜ 测试：31 suites / 230 passed（行覆盖：LendingPool 92%+ / LiquidationManager 100% / RiskManager 100%）
 > ⚠️ 本文档按 V1 单市场撰写；**多资产 V2 全部改动与新增资产表见第 9 章（2026-09-02）**，正文中冲突处以第 9 章为准。
 
 ---
@@ -295,7 +295,7 @@ Wallet (EIP-1193)          ZZZ Backend（风险展示/历史/建议）
 ## 4.1 测试总览 — 2026-09-03（每次跑完测试更新本表日期/用例数）
 
 ```
-forge test:  31 suites, 229 passed, 0 failed, 0 skipped
+forge test:  31 suites, 230 passed, 0 failed, 0 skipped
 forge fmt --check: 通过
 ```
 
@@ -465,7 +465,7 @@ bash script/e2e_sepolia.sh   # cast 逐笔，已本地验证（Anvil 全 8 步 s
 | RiskEngine | `0x2E4F4Cd71D3230eb0f08abfbD1a669e55eB4D701` |
 | LendingPool | `0xA958E9Ab95CEaFF5f341947824bA2237745Ec07D` |
 
-> 部署记录（2026-09-03 第五次）：**D1 坏账吸收顺序按“物理储备→账面储备→存款人(supplyIndex)→Treasury 最后兜底”修正后已上链**；SafeERC20 与“Max 一次还清”亦在链上。演示已播种（USDC 5000 / USDT 3000 / DAI 15000 供应 + 0.01 ETH 抵押 + 可设价价格 + treasuryAddress）。测试：31 suites / 229 passed（含 D1 顺序回归、全额还款、peg 隔离、定向 fuzz、极值矩阵、坏账 front-run 快照、admin 分支、Caps、TimelockGovernance）。历史部署池（`0x8c38…`/`0xc666…`/`0x7BAc…`）均已归档。⚠️ 2026-09-03 后续代码变更（供应/抵押上限、Timelock 治理接线）**未部署到 Sepolia 当前池**，主网上线需整组重部署。
+> 部署记录（2026-09-03 第五次）：**D1 坏账吸收顺序按“物理储备→账面储备→存款人(supplyIndex)→Treasury 最后兜底”修正后已上链**；SafeERC20 与“Max 一次还清”亦在链上。演示已播种（USDC 5000 / USDT 3000 / DAI 15000 供应 + 0.01 ETH 抵押 + 可设价价格 + treasuryAddress）。测试：31 suites / 230 passed（含 D1 顺序回归、全额还款、peg 隔离、定向 fuzz、极值矩阵、坏账 front-run 快照、admin 分支、Caps、TimelockGovernance、ETH 档位回归）。历史部署池（`0x8c38…`/`0xc666…`/`0x7BAc…`）均已归档。⚠️ 2026-09-03 后续代码变更（供应/抵押上限、Timelock 治理接线）**未部署到 Sepolia 当前池**，主网上线需整组重部署。
 
 ## 6.8 cast 命令速查
 
@@ -613,7 +613,7 @@ cast send $SWITCH "setPrice(address,uint256)" $ETH 300000000000 --private-key $D
 *本文档为项目唯一总文档（原分阶段文档已并入后删除）。
 
 ## 9.7 主网上线前置（GO/NO-GO，截至 2026-09-03）
-1. 代码层（已完成）：D1 坏账顺序、SafeERC20、全额还款一次清零、三段利率、多市场隔离、229 测试/不变式/fuzz/Slither0。
+1. 代码层（已完成）：D1 坏账顺序、SafeERC20、全额还款一次清零、三段利率、多市场隔离、230 测试/不变式/fuzz/Slither0。
 2. 本环境可完成项（2026-09-03 已落地）：`script/DeployMainnet.s.sol` 主网就绪参数化模板（真实 feed/多签/默认禁 settable/token 白名单/cap/可选 Timelock/上链预检）+ 补强测试（fuzz/极值矩阵/front-run 快照/admin 分支/Caps/TimelockGovernance，见 PROGRESS §2.6–§2.9）+ `services/monitor` 轮询监控脚手架（§2.10）。**以上均未在真实主网执行；cap/Timelock 为合约代码变更，Sepolia 当前池为旧代码。**
 3. 未完成（需外部资源/治理）：外部第三方审计；主网真实 feed（含 wstETH 合成）并移除 Mock/可设价；多签+Timelock **真网执行**（minDelay 治理决策）；事件/索引（Subgraph）+监控**告警渠道**；坏账前提取公平性策略；供应/抵押上限**具体数值**；真实历史 APY。
 4. 门槛：3 全部落地 + 全量回归通过后再评审上主网。

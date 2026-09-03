@@ -25,3 +25,8 @@ Thumbs.db
 contracts/test-out/
 
 contracts/deployments/
+
+# ---------- 本机工具输出（不推送） ----------
+contracts/audit_v2/
+screenshots/
+

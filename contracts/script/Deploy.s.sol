@@ -82,8 +82,11 @@ contract Deploy is Script {
         pool.addCollateral(address(wsteth), 18);
         pool.addCollateral(address(wbtc), 8);
 
+        // ETH 哨兵档位：RiskManager 构造已预置同表，此处显式声明（防御性，防构造默认被误改）。
+        _setRiskTiers(rm, ETH, false); // 与 wstETH 相同：50/60/70/75/80 LTV
         _setRiskTiers(rm, address(wsteth), false); // 与 ETH 相同：50/60/70/75/80
         _setRiskTiers(rm, address(wbtc), true); // 保守：45/55/65/70/75
+        _verifyEthTiers(rm); // 部署后验证 ETH 5 档非 0
 
         // 其余资产无真实 Sepolia feed → 注册 MockAggregator feed，主源可直接读价
         address[4] memory extraAssets = [address(usdt), address(dai), address(wsteth), address(wbtc)];
@@ -158,6 +161,17 @@ contract Deploy is Script {
             for (uint256 i = 0; i < 5; i++) {
                 rm.setTier(token, i + 1, ltv[i], lt[i]);
             }
+        }
+    }
+
+    /// @notice 部署后验证：ETH 哨兵 5 个档位 LTV 均非 0（防止档位缺失导致借款全废）。
+    function _verifyEthTiers(RiskManager rm) internal view {
+        for (uint256 i = 1; i <= 5; i++) {
+            uint256 ltv = rm.getMaxLTV(ETH, i);
+            uint256 lt = rm.getLiquidationThreshold(ETH, i);
+            require(ltv > 0 && lt > ltv, "ETH tier misconfigured");
+            console2.log("ETH tier", i, "LTV=", ltv);
+            console2.log("ETH tier", i, "LT=", lt);
         }
     }
 }

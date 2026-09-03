@@ -10,11 +10,11 @@
 代码/测试层已到“可自闭环的主网准备就绪”，并已 5 次整组部署到 Sepolia（最新池带正确 D1 顺序）；**上主网仍有外部/治理前置项未完成（见 §3.2 剩余项），当前不建议上主网**。PROGRESS §3.1 两项（部署模板+补强测试）已完成；本轮又落地 §3.2 中三项可本环境完成的代码项：**上限风控、Timelock 治理接线、轮询监控脚手架**（见 §2.8–§2.10）。
 
 ### 关键基线
-- 合约测试：**31 suites / 229 passed / 0 failed**（自 189 递增：+26 补强测试、+10 Caps、+4 TimelockGovernance）
-- 工具：`forge test --fuzz-runs 5000` 通过；状态机不变式 4/4；Slither 39 合约/102 检测器 **0 findings**（cap 字段为纯记账，不影响既有结论，重跑待下次全量）；coverage：LendingPool 行 ~93.97%
-- 合约尺寸：LendingPool **21,486B**（新增 cap 逻辑后仍 < EIP-170 24576）
+- 合约测试：**31 suites / 230 passed / 0 failed**（自 189 递增：+26 补强测试、+10 Caps、+4 TimelockGovernance、+1 ETH 档位回归）
+- 工具（2026-09-03 cap 后重跑）：`forge test --fuzz-runs 5000` 通过；状态机不变式 4/4；**Slither 41 合约/102 检测器 0 findings**（`contracts/audit_v2/slither_2026-09-03_caps_final.txt`，本机）；coverage：**LendingPool 行 94.21% (521/553)**、RiskManager/LiquidationManager 100%
+- 合约尺寸：LendingPool **21,486B**（< EIP-170 24576）
 - 前端：`npm run build` 通过，Cloudflare Pages 在线（静态导出，连 Sepolia 当前池）；ABI 快照已随新 cap setter 重新导出
-- 监控脚手架：`services/monitor`（TS + viem，tsc 通过）
+- 监控脚手架：`services/monitor`（TS+viem，tsc 通过，**真实 Sepolia RPC 冒烟通过**；webhook 告警渠道可选）
 
 ---
 
@@ -87,6 +87,20 @@
 - 事件已移除 → 监控只能靠视图轮询。脚手架：每轮 `marketAccounts`/`getUserPositionV2`/`isLiquidatable`/`reserveManager.balanceOf`/`getAssetPrice`，产出 `out/alerts.log`（去抖告警：可清算/低 HF/坏账窗口/高利用率/储备不足/喂价失效）与 `out/metrics.jsonl`（全量快照，可作 Subgraph 输入）。
 - 状态：TS + viem 编译通过；`config/positions.json` 配置盯梢市场/用户。生产告警渠道（Telegram/邮件）为后续项。
 
+### 2.11 本轮新增：工具重跑与监控验证（A 组收尾）
+- **Slither 重跑（cap 变更后）**：41 合约 / 102 检测器 / **0 findings**（本机 `audit_v2/slither_mainnet-final_2026-09-03.txt`）。
+- **coverage 重跑**：`_liquidateCore` 局部变量过多导致无 viaIR 时 stack too deep → 将清算金额计算拆为 `internal view _liquidateAmounts`（语义不变，230 回归通过）。结果 **LendingPool 行 94.21%**。注：coverage 命令需 `forge coverage --ir-minimum --skip script`。
+- **monitor 真网冒烟**：publicnode Sepolia RPC 单次轮询通过——正确读 3 市场现金（USDC 5000/USDT 3000/**DAI 15000**，0 借款）与 ETH 真价；对 Sepolia 池 wstETH/WBTC/USDC/USDT/DAI 主源（stale/mock）正确触发 CRITICAL（`out/alerts.log`/`out/metrics.jsonl`）。修 Windows 路径目录 bug。
+- **告警渠道**：可选 `ALERT_WEBHOOK_URL` + **Telegram bot**（`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`，WARN/CRITICAL 推送）已接入；`.env.example`/README 更新。
+- **Subgraph 完整索引**：仍属外部项（无事件流；可在脚手架 metrics 数据上自建索引或重新引入最小事件集后建 Subgraph）。
+
+### 2.12 主网收尾专项（P0–P2）
+- **P0 ETH 档位显式化**：Deploy.s.sol / DeployMainnet.s.sol 补 `_setRiskTiers(rm, ETH哨兵, …)`（RiskManager 构造本就预置 50/60/70/75/80；显式写入=防御加固）+ `_verifyEthTiers` 部署后校验（ETH 5 档 LTV 非 0、LT>LTV）+ `test_EthSentinelTiersNonZero_AfterDeployDefaults` 回归 → **230 passed**。
+- **DAI 播种精度修复**：实测 Sepolia 当前池 DAI 现金原仅 **15 DAI（1.5e19）**（播种少 1000×，文档曾称 15000）→ 链上补供 14985e18 → DAI 现金=**15000e18**（tx 见任务记录会话 36）。
+- **前端干净重建**：清 `.next`/`out` → `npm run build`（8 路由静态导出）→ 引用资源 0 缺失、地址=第 5 次池 `0xA958…07D`。**Cloudflare 部署待有效凭据**（传入 token 无效 code 9109）。
+- **工具重跑存档**（本机 `audit_v2/`）：Slither 41/102/0、coverage LendingPool 94.21%。
+- 文档：D1 顺序统一为“物理→账面→存款人→Treasury 最后”（主网准备 §3.1#1 修正、删除 treasury 承担讨论）；AuditPoc 注释更新。
+
 ---
 
 ## 3. 未完成待办
@@ -128,7 +142,7 @@
 ---
 
 ## 5. 风险与不确定（摘要）
-详见 `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md`，要点：无外部审计；Oracle 中断锁“有债用户”降险；事件缺失靠轮询（脚手架已建，告警渠道未接）；坏账 front-run 无延迟；wstETH 真实兑换率/合成 feed 未验证；Sepolia 演示掩盖 feed 可用性；Smart Account（第三方钱包模块）兼容与报错提示待打磨；历次归档旧池资产需注意；**cap/Timelock 为合约代码变更，Sepolia 当前池尚未包含（待整组重部署）；cap 上限值、Timelock minDelay 均为主网配置决策**。
+详见 `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md`，要点：无外部审计；Oracle 中断锁“有债用户”降险；事件缺失靠轮询（脚手架已建 + 真网冒烟通过，Subgraph/告警渠道正式化待做）；坏账 front-run 无延迟；wstETH 真实兑换率/合成 feed 未验证；Sepolia 演示掩盖 feed 可用性（monitor 冒烟已实测 wstETH/WBTC 主源 stale → CRITICAL 正确）；Smart Account（第三方钱包模块）兼容与报错提示待打磨；历次归档旧池资产需注意；**cap/Timelock 为合约代码变更，Sepolia 当前池尚未包含（待整组重部署）；cap 上限值、Timelock minDelay 均为主网配置决策**。
 
 ---
 

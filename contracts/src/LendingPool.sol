@@ -635,29 +635,12 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         Market storage m = _market(marketId);
         uint8 t = userTier[target][marketId];
         require(t > 0, "no debt");
-        uint256 debtWad = _debtValueWad(target);
-        uint256 debtToken = (userBorrowNorm[target][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
-        uint256 hf = _healthFactor(target, debtWad);
-        require(hf < WAD, "not liquidatable");
-        // 先按该市场债务（token 单位）封顶再换算 USD，避免超大 debtToCover 输入在乘法中溢出
-        uint256 coverRequest = debtToCover > debtToken ? debtToken : debtToCover;
-        uint256 coverWad = _amountToWadUsd(coverRequest, m.wadScale, _priceOf(address(m.asset)));
-        if (coverWad > debtWad * riskManager.getCloseFactor() / WAD) {
-            coverWad = debtWad * riskManager.getCloseFactor() / WAD;
-        }
-        if (coverWad > debtWad) coverWad = debtWad;
-        require(coverWad > 0, "cover=0");
-        uint256 seizeValueWad = liquidationManager.computeSeizeValue(
-            _collateralValueWad(target), coverWad, riskManager.getLiquidationBonus()
-        );
-        uint256 seizeAmount =
-            _wadToAmount(seizeValueWad, _collaterals[collId].wadScale, _priceOf(_collaterals[collId].token));
-        uint256 posColl = userCollateral[target][collId];
-        if (seizeAmount > posColl) seizeAmount = posColl;
-        require(seizeAmount > 0, "seize=0");
-        if (minSeizeAmount > 0) require(seizeAmount >= minSeizeAmount, "seize below min");
-        uint256 coverAmount = _wadToAmount(coverWad, m.wadScale, _priceOf(address(m.asset)));
-        if (coverAmount > debtToken) coverAmount = debtToken;
+
+        // 金额计算拆到 helper（含 closeFactor 封顶 / seize 上限 / minSeize 校验 / cover 封顶），
+        // 既保证语义不变，也避免 _liquidateCore 局部变量过多在关闭 viaIR 时 stack too deep。
+        (uint256 coverAmount, uint256 seizeAmount) =
+            _liquidateAmounts(m, target, marketId, collId, debtToCover, minSeizeAmount, t);
+
         uint256 normReduction = _mulDivUp(coverAmount, WAD, m.borrowIndexByTier[t]);
         if (normReduction > userBorrowNorm[target][marketId]) normReduction = userBorrowNorm[target][marketId];
         userBorrowNorm[target][marketId] -= normReduction;
@@ -684,6 +667,40 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         } else {
             IERC20(_collaterals[collId].token).safeTransfer(msg.sender, seizeAmount);
         }
+    }
+
+    /// @notice 清算金额计算（只读）：cover ≤ closeFactor×债务、≤债务；seize ≤ 抵押现值×bonus 且 ≤ 用户持有。
+    ///         返回 (coverAmount token, seizeAmount token)。仅校验/读取，不修改状态。
+    function _liquidateAmounts(
+        Market storage m,
+        address target,
+        uint8 marketId,
+        uint8 collId,
+        uint256 debtToCover,
+        uint256 minSeizeAmount,
+        uint8 t
+    ) internal view returns (uint256 coverAmount, uint256 seizeAmount) {
+        uint256 debtWad = _debtValueWad(target);
+        uint256 debtToken = (userBorrowNorm[target][marketId] * m.borrowIndexByTier[t] + WAD - 1) / WAD;
+        require(_healthFactor(target, debtWad) < WAD, "not liquidatable");
+        // 先按该市场债务（token 单位）封顶再换算 USD，避免超大 debtToCover 输入在乘法中溢出
+        uint256 coverRequest = debtToCover > debtToken ? debtToken : debtToCover;
+        uint256 coverWad = _amountToWadUsd(coverRequest, m.wadScale, _priceOf(address(m.asset)));
+        if (coverWad > debtWad * riskManager.getCloseFactor() / WAD) {
+            coverWad = debtWad * riskManager.getCloseFactor() / WAD;
+        }
+        if (coverWad > debtWad) coverWad = debtWad;
+        require(coverWad > 0, "cover=0");
+        uint256 seizeValueWad = liquidationManager.computeSeizeValue(
+            _collateralValueWad(target), coverWad, riskManager.getLiquidationBonus()
+        );
+        seizeAmount = _wadToAmount(seizeValueWad, _collaterals[collId].wadScale, _priceOf(_collaterals[collId].token));
+        uint256 posColl = userCollateral[target][collId];
+        if (seizeAmount > posColl) seizeAmount = posColl;
+        require(seizeAmount > 0, "seize=0");
+        if (minSeizeAmount > 0) require(seizeAmount >= minSeizeAmount, "seize below min");
+        coverAmount = _wadToAmount(coverWad, m.wadScale, _priceOf(address(m.asset)));
+        if (coverAmount > debtToken) coverAmount = debtToken;
     }
 
     function _handleBadDebtCore(uint8 marketId, address target) internal {

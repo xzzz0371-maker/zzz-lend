@@ -122,6 +122,8 @@ contract DeployMainnet is Script {
         // ===== 追加市场/抵押品（token 白名单落地） =====
         if (usdt.enabled) pool.addMarket(usdt.token, 6);
         if (dai.enabled) pool.addMarket(dai.token, 18);
+        // ETH 哨兵：RiskManager 构造已预置同表，此处显式声明（防御性，防构造默认被误改）。
+        _setRiskTiers(rm, ETH, false); // 与 wstETH 相同：50/60/70/75/80 LTV
         if (wsteth.enabled) {
             pool.addCollateral(wsteth.token, 18);
             _setRiskTiers(rm, wsteth.token, false); // 与 ETH 同表：50/60/70/75/80 LTV
@@ -130,6 +132,7 @@ contract DeployMainnet is Script {
             pool.addCollateral(wbtc.token, 8);
             _setRiskTiers(rm, wbtc.token, true); // 保守表：45/55/65/70/75 LTV
         }
+        _verifyEthTiers(rm); // 部署后验证 ETH 5 档非 0
 
         // ===== RiskEngine / 接线 =====
         RiskEngine re = new RiskEngine(address(oracle), address(pool));
@@ -282,6 +285,17 @@ contract DeployMainnet is Script {
 
     function _setCollateralCap(LendingPool pool, uint8 collId, uint256 cap) internal {
         if (cap > 0) pool.setCollateralCap(collId, cap);
+    }
+
+    /// @notice 部署后验证：ETH 哨兵 5 个档位 LTV 均非 0（防止档位缺失导致借款全废）。
+    function _verifyEthTiers(RiskManager rm) internal view {
+        for (uint256 i = 1; i <= 5; i++) {
+            uint256 ltv = rm.getMaxLTV(ETH, i);
+            uint256 lt = rm.getLiquidationThreshold(ETH, i);
+            require(ltv > 0 && lt > ltv, "ETH tier misconfigured");
+            console2.log("ETH tier", i, "LTV=", ltv);
+            console2.log("ETH tier", i, "LT=", lt);
+        }
     }
 
     function _log(

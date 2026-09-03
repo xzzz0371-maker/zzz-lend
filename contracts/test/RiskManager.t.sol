@@ -21,6 +21,22 @@ contract RiskManagerTest is Test {
         assertEq(rm.getLiquidationThreshold(5), 9e17);
     }
 
+    /// @notice 部署脚本主网前置项回归：ETH 哨兵地址 5 档 LTV/LT 必须非 0 且 LT>LTV
+    ///         （若 RiskManager 构造默认被误改/漏配，此测试会先红）。
+    function test_EthSentinelTiersNonZero_AfterDeployDefaults() public view {
+        address eth = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+        uint256[5] memory expectLtv = [uint256(5e17), 6e17, 7e17, 75e16, 8e17];
+        uint256[5] memory expectLt = [uint256(6e17), 7e17, 78e16, 85e16, 9e17];
+        for (uint256 t = 1; t <= 5; t++) {
+            uint256 ltv = rm.getMaxLTV(eth, t);
+            uint256 lt = rm.getLiquidationThreshold(eth, t);
+            assertGt(ltv, 0, "ETH LTV must not be 0");
+            assertGt(lt, ltv, "ETH LT must exceed LTV");
+            assertEq(ltv, expectLtv[t - 1]);
+            assertEq(lt, expectLt[t - 1]);
+        }
+    }
+
     function test_ValidateBorrow() public {
         rm.validateBorrow(1, 100e18, 50e18);
         vm.expectRevert(bytes("ltv too high"));

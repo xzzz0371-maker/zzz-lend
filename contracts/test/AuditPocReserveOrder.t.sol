@@ -4,10 +4,10 @@ pragma solidity ^0.8.24;
 import {BaseSetupV2} from "./BaseSetupV2.t.sol";
 import {console2} from "forge-std/console2.sol";
 
-/// @notice 审计 PoC：记录 handleBadDebt 的损失吸收顺序（depositors vs book reserve）。
-/// 目的：验证“账面风险储备是否先于存款人吸收坏账”。当前实现为：
-///   物理储备(reserveManager) → 存款人(supplyIndex) → 账面 reserve → treasury。
-/// 与“储备=第一损失缓冲”的产品意图不一致（设计发现 D1）。
+/// @notice 审计 PoC：记录 handleBadDebt 的损失吸收顺序。
+/// 2026-09-03 修正后（第 5 次部署，链上/主文档一致）最终顺序为：
+///   物理储备(reserveManager) → 账面风险储备 → 存款人(supplyIndex) → Treasury 最后兜底。
+/// 本 PoC 保留“记录吸收顺序”用途，断言见 BadDebt/SecurityFixes（新语义）。
 contract AuditPocReserveOrder is BaseSetupV2 {
     function _usdcSupplyIndex() internal view returns (uint256) {
         (,,,,, uint256 x) = pool.marketAccounts(M_USDC);

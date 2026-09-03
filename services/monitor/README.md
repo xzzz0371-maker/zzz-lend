@@ -21,6 +21,8 @@ npm run watch
 
 - `./out/alerts.log`：新出现且未恢复的告警（去抖，只有状态翻转才追加一行）。
 - `./out/metrics.jsonl`：每次轮询全部指标（供后续做图/阈值告警）。
+- 可选 `ALERT_WEBHOOK_URL`：每产生一条告警即 POST JSON（兼容 Telegram bot `sendMessage`，`{text, alert}`）；不设置则仅写 `out/alerts.log`。
+- 可选 `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`：**WARN/CRITICAL** 通过 Bot API `sendMessage` 推送到指定 chat（INFO 不推）。用法：BotFather 建 bot 拿 token；给 bot 发消息后用 `getUpdates` 拿 `chat.id`。
 - 告警等级：`CRITICAL`（可清算/坏账/喂价失效）、`WARN`（HF 接近 1、储备不足）。
 
 ## 检查项（对 Sepolia 当前池 `contracts/deployments/sepolia.json` / `frontend/src/lib/deployments/sepolia.json`）
