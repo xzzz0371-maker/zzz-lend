@@ -79,6 +79,14 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint256 public treasuryFactor = 2e16;
     address public treasuryAddress;
 
+    // ===== 上限风控（每市场供应上限 / 每抵押品上限；0 = 不限制，主网白名单逐项配置）=====
+    /// @notice 市场总供应上限（token 单位，含累计利息）。0 = 无上限。
+    mapping(uint8 => uint256) public marketSupplyCap;
+    /// @notice 抵押品总量上限（token 原始单位）。0 = 无上限。
+    mapping(uint8 => uint256) public collateralCap;
+    /// @notice 池内当前各抵押品总量账本（raw 单位），供 collateralCap 判定。
+    mapping(uint8 => uint256) public collateralTotal;
+
     event Supplied(address indexed user, uint256 amount, uint256 shares);
     event Withdrawn(address indexed user, uint256 amount, uint256 shares);
     event CollateralSupplied(address indexed user, uint256 amount);
@@ -275,6 +283,18 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         require(value != address(0), "zero address");
         treasuryAddress = value;
         emit TreasuryAddressUpdated(value);
+    }
+
+    /// @notice 设置市场总供应上限（token 单位）。0 = 解除限制。
+    function setMarketSupplyCap(uint8 marketId, uint256 cap) external onlyRole(PARAM_ADMIN_ROLE) {
+        _market(marketId); // 校验 marketId 存在
+        marketSupplyCap[marketId] = cap;
+    }
+
+    /// @notice 设置抵押品总量上限（raw 单位）。0 = 解除限制。
+    function setCollateralCap(uint8 collId, uint256 cap) external onlyRole(PARAM_ADMIN_ROLE) {
+        require(collId < _collaterals.length, "bad collateral");
+        collateralCap[collId] = cap;
     }
 
     function pause() external onlyRole(PAUSER_ROLE) {
@@ -480,6 +500,8 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         Market storage m = _market(marketId);
         require(amount >= _minSupply(m), "amount below min");
         _accrueMarket(marketId);
+        uint256 supplyBefore = m.totalShares * m.supplyIndex / WAD;
+        require(marketSupplyCap[marketId] == 0 || supplyBefore + amount <= marketSupplyCap[marketId], "supply cap hit");
         shares = amount * WAD / m.supplyIndex;
         require(shares > 0, "shares=0");
         userShares[msg.sender][marketId] += shares;
@@ -504,7 +526,12 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     function _supplyCollateralCore(uint8 collId, uint256 amount) internal returns (uint8) {
         require(!_oracleAnomalous(), "price anomalous");
         require(amount >= _minCollateral(collId), "value below min");
+        require(
+            collateralCap[collId] == 0 || collateralTotal[collId] + amount <= collateralCap[collId],
+            "collateral cap hit"
+        );
         userCollateral[msg.sender][collId] += amount;
+        collateralTotal[collId] += amount;
         if (_collaterals[collId].token != ETH) {
             IERC20(_collaterals[collId].token).safeTransferFrom(msg.sender, address(this), amount);
         }
@@ -522,6 +549,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             userCollateral[msg.sender][collId] += amount;
         }
         userCollateral[msg.sender][collId] -= amount;
+        collateralTotal[collId] -= amount;
         if (_collaterals[collId].token == ETH) {
             _safeSendEth(payable(msg.sender), amount);
         } else {
@@ -640,6 +668,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             userTier[target][marketId] = 0;
         }
         userCollateral[target][collId] -= seizeAmount;
+        collateralTotal[collId] -= seizeAmount;
         m.cash += coverAmount;
         covered = coverAmount;
         seized = seizeAmount;

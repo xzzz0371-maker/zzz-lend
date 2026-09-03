@@ -7,13 +7,14 @@
 ---
 
 ## 1. 当前状态（一句话）
-代码/测试层已到“可自闭环的主网准备就绪”，并已 5 次整组部署到 Sepolia（最新池带正确 D1 顺序）；**上主网仍有外部/治理前置项未完成（见 §4），当前不建议上主网**。本轮（§3.1）两项本环境可继续事项已完成：主网就绪部署模板脚本 + 四组补强测试。
+代码/测试层已到“可自闭环的主网准备就绪”，并已 5 次整组部署到 Sepolia（最新池带正确 D1 顺序）；**上主网仍有外部/治理前置项未完成（见 §3.2 剩余项），当前不建议上主网**。PROGRESS §3.1 两项（部署模板+补强测试）已完成；本轮又落地 §3.2 中三项可本环境完成的代码项：**上限风控、Timelock 治理接线、轮询监控脚手架**（见 §2.8–§2.10）。
 
 ### 关键基线
-- 合约测试：**29 suites / 215 passed / 0 failed**（新增 26：定向 fuzz 7、极值矩阵 4、坏账 front-run 快照 4、addMarket/admin 分支 11）
-- 工具：`forge test --fuzz-runs 5000` 通过；状态机不变式 4/4；Slither 39 合约/102 检测器 **0 findings**；coverage：LendingPool 行 ~93.97%
-- 合约尺寸：LendingPool ~20.6–21.4KB（< EIP-170 24576）
-- 前端：`npm run build` 通过，Cloudflare Pages 在线（静态导出，连 Sepolia 当前池）
+- 合约测试：**31 suites / 229 passed / 0 failed**（自 189 递增：+26 补强测试、+10 Caps、+4 TimelockGovernance）
+- 工具：`forge test --fuzz-runs 5000` 通过；状态机不变式 4/4；Slither 39 合约/102 检测器 **0 findings**（cap 字段为纯记账，不影响既有结论，重跑待下次全量）；coverage：LendingPool 行 ~93.97%
+- 合约尺寸：LendingPool **21,486B**（新增 cap 逻辑后仍 < EIP-170 24576）
+- 前端：`npm run build` 通过，Cloudflare Pages 在线（静态导出，连 Sepolia 当前池）；ABI 快照已随新 cap setter 重新导出
+- 监控脚手架：`services/monitor`（TS + viem，tsc 通过）
 
 ---
 
@@ -72,21 +73,37 @@
 | `BadDebtFrontrunSnapshot.t.sol` | 4 | 坏账窗口 front-run 快照：抢先提款者逃损 vs 无人抢先按份分摊；快照恢复幂等；bank-run 受池现金上限约束 |
 | `AdminBranches.t.sol` | 11 | addMarket zero/ETH/越权/超 MAX_MARKETS(8)；addCollateral zero/超 MAX_COLLATERALS(8)；非法 marketId/collateral 全操作 revert；角色矩阵；reserveTarget=100% 边界 |
 
+### 2.8 本轮新增：供应/抵押上限风控（LendingPool + Caps.t.sol）
+- **代码**：`LendingPool` 新增每市场供应上限 `marketSupplyCap[market]`、每抵押品上限 `collateralCap[coll]` 与抵押品池内总量账本 `collateralTotal[coll]`（supply/withdraw/liquidate 同步维护）；`setMarketSupplyCap/setCollateralCap`（PARAM_ADMIN，0=不限制=向后兼容）；supply 检查“现供+本次 ≤ 上限”，抵押品 supply/withdraw/liquidate 均计入/扣减。
+- **合约尺寸**：21,486B（仍 < 24576）。**注意：此为合约代码变更，Sepolia 已部署池为旧代码，未含 cap 字段；如需上链须整组重部署。**
+- **测试**：`Caps.t.sol`（10）达上限拦截、提款/清算释放、0=不限制、权限、坏 id。
+
+### 2.9 本轮新增：Timelock 治理（OZ TimelockController）
+- **接线**：`DeployMainnet.s.sol` 支持 `MAINNET_TIMELOCK_MIN_DELAY>0` → 部署 OZ `TimelockController`，`admin`（多签）为 proposer/executor；PARAM_ADMIN/DEFAULT_ADMIN/Ownable 全部指向 timelock；PAUSER 仍由独立 `pauser` 快速熔断（不延迟）；部署者撤销。
+- **测试**：`TimelockGovernance.t.sol`（4）参数变更必须延时执行、直接调用被拒、PAUSER 独立、IRM owner 移交后仅能经 timelock 改参。
+- **说明**：主网真正启用仍需真实多签 + 选定 minDelay 后再跑一次部署（模板已具备）。
+
+### 2.10 本轮新增：轮询监控/索引脚手架（services/monitor）
+- 事件已移除 → 监控只能靠视图轮询。脚手架：每轮 `marketAccounts`/`getUserPositionV2`/`isLiquidatable`/`reserveManager.balanceOf`/`getAssetPrice`，产出 `out/alerts.log`（去抖告警：可清算/低 HF/坏账窗口/高利用率/储备不足/喂价失效）与 `out/metrics.jsonl`（全量快照，可作 Subgraph 输入）。
+- 状态：TS + viem 编译通过；`config/positions.json` 配置盯梢市场/用户。生产告警渠道（Telegram/邮件）为后续项。
+
 ---
 
 ## 3. 未完成待办
+
 ### 3.1 本环境可继续（已完成）
 - ✅ Deploy 脚本“主网就绪”参数化模板（真实 feed / 多签 / 默认禁 settable / token 白名单配置项）→ `script/DeployMainnet.s.sol`
 - ✅ 补强测试：repay/liquidate 定向 fuzz、closeFactor/bonus/reserve 极值矩阵、坏账 front-run 快照、addMarket/admin 分支覆盖 → 见 §2.7（29 suites / 215 passed）
+- ✅ 本轮新增代码项（§3.2 中可自闭环的三项）：供应/抵押上限风控、Timelock 治理接线、轮询监控脚手架 → §2.8–§2.10（31 suites / 229 passed）
 
-### 3.2 外部 / 需决策（≈7 项，写入 §9.7）
-1. 外部第三方安全审计 + 修复回归
-2. 主网真实 Chainlink feed（ETH/USDC/USDT/DAI/WBTC/wstETH 或 wstETH 合成），移除 Mock/可设价
-3. 主网 fork dress rehearsal（真实 token/feed/RPC）
-4. 多签 + Timelock 治理；撤销部署者、隔离 Pauser/Treasury
-5. 事件/索引（Subgraph）+ 清算与异常监控告警
-6. 坏账 front-run（无延迟提款）公平策略（提款队列/锁窗，或正式公示承担模型）
-7. 代币接入白名单 + 供应/抵押上限风控 + 真实历史 APY 数据源
+### 3.2 外部 / 需决策（部分已落地，写入 §9.7）
+1. 外部第三方安全审计 + 修复回归 —— ❌ 未做
+2. 主网真实 Chainlink feed（含 wstETH 合成）+ 移除 Mock/可设价 —— ⚠️ 模板已参数化，未真网执行
+3. 主网 fork dress rehearsal —— ❌ 未做
+4. 多签 + Timelock 治理；撤销部署者、隔离 Pauser/Treasury —— ✅ 代码/测试落地（§2.9）；真网执行待治理
+5. 事件/索引（Subgraph）+ 清算与异常监控告警 —— ⚠️ 轮询脚手架已建（§2.10）；Subgraph 与告警渠道未做
+6. 坏账 front-run 公平策略（提款队列/锁窗/公示承担模型） —— ❌ 未做（front-run 快照已固化权衡）
+7. 代币白名单 + 供应/抵押上限风控 + 真实历史 APY —— ✅ 白名单(§2.6)与上限(§2.8)已落地；真实历史 APY 未做
 
 ---
 
@@ -105,11 +122,13 @@
 | K10 | SafeERC20 + “仅标准 ERC20”原则 | 兼容无返回值 token；禁 fee-on-transfer/rebasing |
 | K11 | 94/4/2 分成、储备目标 ~3%、三段利率初值 | 需求给定，待真实流量验证 |
 | K12 | “测试网功能版 ≠ 可上主网” | GO/NO-GO 见 §9.7；自审不替代外部审计 |
+| K13 | cap 用“0=不限制”默认，向后兼容；账本 `collateralTotal` 随 supply/withdraw/liquidate 维护 | 新增存储与记账不破坏既有 189 语义；**Sepolia 已部署池为旧代码（无 cap）** |
+| K14 | 治理：governance 持 PARAM/DEFAULT/Owner，PAUSER 独立快速熔断；可选 OZ Timelock 包裹 | 满足“多签+Timelock+撤销部署者+隔离 Pauser/Treasury”；Timelock 默认关闭，主网启用需真网再跑 |
 
 ---
 
 ## 5. 风险与不确定（摘要）
-详见 `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md`，要点：无外部审计；Oracle 中断锁“有债用户”降险；事件缺失靠轮询；坏账 front-run 无延迟；wstETH 真实兑换率/合成 feed 未验证；fuzz 覆盖面低；Sepolia 演示掩盖 feed 可用性；Smart Account（第三方钱包模块）兼容与报错提示待打磨；历次归档旧池资产需注意。
+详见 `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md`，要点：无外部审计；Oracle 中断锁“有债用户”降险；事件缺失靠轮询（脚手架已建，告警渠道未接）；坏账 front-run 无延迟；wstETH 真实兑换率/合成 feed 未验证；Sepolia 演示掩盖 feed 可用性；Smart Account（第三方钱包模块）兼容与报错提示待打磨；历次归档旧池资产需注意；**cap/Timelock 为合约代码变更，Sepolia 当前池尚未包含（待整组重部署）；cap 上限值、Timelock minDelay 均为主网配置决策**。
 
 ---
 

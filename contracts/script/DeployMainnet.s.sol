@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {ChainlinkOracle, IAggregatorV3} from "../src/oracle/ChainlinkOracle.sol";
 import {InterestRateModel} from "../src/InterestRateModel.sol";
 import {RiskManager} from "../src/RiskManager.sol";
@@ -20,6 +21,9 @@ import {LendingPool} from "../src/LendingPool.sol";
 ///        treasury 指向 MAINNET_TREASURY；部署者最后撤销自己的 DEFAULT_ADMIN 等角色。
 ///     3. token 白名单：仅注册 enabled 且提供了真实 feed 的资产（USDC 市场 & ETH 抵押为构造内建，必须启用）。
 ///     4. 预检：地址/feed 非零、代码存在性、feed 新鲜度与 decimals 在部署前校验，缺项即 revert。
+///     5. 上限风控：MAINNET_*_CAP 可为各市场/抵押品设置总供应/抵押上限（0 = 不限制）。
+///     6. 治理 Timelock（可选）：MAINNET_TIMELOCK_MIN_DELAY>0 时部署 OZ TimelockController，
+///        admin(多签) 为 proposer/executor，参数变更需延时执行；PAUSER 独立快速熔断（不受 delay）。
 ///
 ///   用法（先填 .env 或环境变量）：
 ///     forge script script/DeployMainnet.s.sol:DeployMainnet --rpc-url $MAINNET_RPC_URL \
@@ -40,6 +44,9 @@ contract DeployMainnet is Script {
         bool enabled;
     }
 
+    /// @notice 部署的 TimelockController 地址（0 = 未启用 Timelock，governance=admin 多签）。
+    address internal timelockDeployed;
+
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
@@ -51,6 +58,12 @@ contract DeployMainnet is Script {
         _require(treasury != address(0), "MAINNET_TREASURY required");
         _require(admin != deployer, "admin must be a multisig, not deployer");
         _require(treasury != deployer, "treasury must differ from deployer");
+
+        // ===== 治理：直接多签（默认）或可选的 Timelock 包裹 =====
+        // 当 MAINNET_TIMELOCK_MIN_DELAY > 0 时部署 OZ TimelockController；admin(多签) 作为
+        // proposer/executor，governance 作为协议各合约的 PARAM_ADMIN/Owner（参数变更走延迟执行）。
+        // PAUSER 保持独立快速熔断角色，不受 timelock 延迟约束。
+        uint256 timelockDelay = vm.envOr("MAINNET_TIMELOCK_MIN_DELAY", uint256(0));
 
         // ===== whitelist 配置（enabled 项必须提供真实 feed/token） =====
         // 市场（借贷资产）：USDC 为构造基座（6dp，恒启用）；USDT/DAI 按 enabled 追加。
@@ -123,22 +136,46 @@ contract DeployMainnet is Script {
         rsv.setLendingPool(address(pool));
         pool.setTreasuryAddress(treasury);
 
-        // ===== 角色：移交多签 + treasury + 撤销部署者 =====
-        // pool（AccessControl）
-        pool.grantRole(pool.PARAM_ADMIN_ROLE(), admin);
+        // ===== 上限风控（可选）：MAINNET_*_CAP 非零即设置；0 = 不限制 =====
+        // 市场供应上限（token 单位）：USDC=市场0 / USDT=市场1 / DAI=市场2（前提是该市场 enabled）
+        _setSupplyCap(pool, 0, vm.envOr("MAINNET_USDC_SUPPLY_CAP", uint256(0)));
+        if (usdt.enabled) _setSupplyCap(pool, 1, vm.envOr("MAINNET_USDT_SUPPLY_CAP", uint256(0)));
+        if (dai.enabled) _setSupplyCap(pool, 2, vm.envOr("MAINNET_DAI_SUPPLY_CAP", uint256(0)));
+        // 抵押品上限（raw 单位）：ETH=0 / wstETH=1 / WBTC=2（前提是 enabled）
+        _setCollateralCap(pool, 0, vm.envOr("MAINNET_ETH_COLLATERAL_CAP", uint256(0)));
+        if (wsteth.enabled) _setCollateralCap(pool, 1, vm.envOr("MAINNET_WSTETH_COLLATERAL_CAP", uint256(0)));
+        if (wbtc.enabled) _setCollateralCap(pool, 2, vm.envOr("MAINNET_WBTC_COLLATERAL_CAP", uint256(0)));
+
+        // ===== 治理层：多签直持（默认）或 Timelock 包裹 =====
+        address governance = admin;
+        TimelockController timelock;
+        if (timelockDelay > 0) {
+            address[] memory proposers = new address[](1);
+            proposers[0] = admin;
+            address[] memory executors = new address[](1);
+            executors[0] = admin;
+            timelock = new TimelockController(timelockDelay, proposers, executors, admin);
+            governance = address(timelock);
+            timelockDeployed = address(timelock);
+            console2.log("[timelock] deployed at", governance, "delay=", timelockDelay);
+        }
+
+        // ===== 角色：governance 持 PARAM/默认管理，pauser 独立熔断，treasury 已设；撤销部署者 =====
+        // pool（AccessControl）：PARAM_ADMIN + DEFAULT_ADMIN → governance；PAUSER → pauser
+        pool.grantRole(pool.PARAM_ADMIN_ROLE(), governance);
         pool.grantRole(pool.PAUSER_ROLE(), pauser);
-        pool.grantRole(pool.DEFAULT_ADMIN_ROLE(), admin);
+        pool.grantRole(pool.DEFAULT_ADMIN_ROLE(), governance);
         // oracle（AccessControl）
-        oracle.grantRole(oracle.PARAM_ADMIN_ROLE(), admin);
+        oracle.grantRole(oracle.PARAM_ADMIN_ROLE(), governance);
         oracle.grantRole(oracle.PAUSER_ROLE(), pauser);
-        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), admin);
+        oracle.grantRole(oracle.DEFAULT_ADMIN_ROLE(), governance);
         // riskEngine（AccessControl）
-        re.grantRole(re.PARAM_ADMIN_ROLE(), admin);
-        re.grantRole(re.DEFAULT_ADMIN_ROLE(), admin);
-        // Ownable 系列
-        irm.transferOwnership(admin);
-        rm.transferOwnership(admin);
-        rsv.transferOwnership(admin);
+        re.grantRole(re.PARAM_ADMIN_ROLE(), governance);
+        re.grantRole(re.DEFAULT_ADMIN_ROLE(), governance);
+        // Ownable 系列 → governance
+        irm.transferOwnership(governance);
+        rm.transferOwnership(governance);
+        rsv.transferOwnership(governance);
 
         // 撤销部署者：先撤子角色，最后撤 DEFAULT_ADMIN（撤后本脚本不能再做管理操作）。
         pool.renounceRole(pool.PARAM_ADMIN_ROLE(), deployer);
@@ -238,6 +275,15 @@ contract DeployMainnet is Script {
         require(cond, msg_);
     }
 
+    /// @notice 若 cap>0 设置市场供应上限；marketId 越界在 enabled=false 时不会调用。
+    function _setSupplyCap(LendingPool pool, uint8 marketId, uint256 cap) internal {
+        if (cap > 0) pool.setMarketSupplyCap(marketId, cap);
+    }
+
+    function _setCollateralCap(LendingPool pool, uint8 collId, uint256 cap) internal {
+        if (cap > 0) pool.setCollateralCap(collId, cap);
+    }
+
     function _log(
         address deployer,
         address admin,
@@ -275,6 +321,9 @@ contract DeployMainnet is Script {
         console2.log("ReserveManager:", address(rsv));
         console2.log("RiskEngine:", address(re));
         console2.log("LendingPool:", address(pool));
+        console2.log(
+            "Timelock:", timelockDeployed == address(0) ? "disabled (multisig direct)" : vm.toString(timelockDeployed)
+        );
         console2.log("NOTE: SwitchableOracle NOT deployed (settable disabled by design).");
     }
 
@@ -322,6 +371,7 @@ contract DeployMainnet is Script {
         obj = vm.serializeAddress("root", "reserveManager", address(rsv));
         obj = vm.serializeAddress("root", "riskEngine", address(re));
         obj = vm.serializeAddress("root", "lendingPool", address(pool));
+        obj = vm.serializeAddress("root", "timelock", timelockDeployed);
         vm.writeJson(obj, "./deployments/mainnet.json");
     }
 }
