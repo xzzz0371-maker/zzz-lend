@@ -155,14 +155,16 @@ contract DeployMainnet is Script {
         pool.setTreasuryAddress(treasury);
 
         // ===== 上限风控（可选）：MAINNET_*_CAP 非零即设置；0 = 不限制 =====
-        // 市场供应上限（token 单位）：USDC=市场0 / USDT=市场1 / DAI=市场2（前提是该市场 enabled）
+        // 索引随 enabled 组合动态计数（append 语义）：USDC 恒 market0、ETH 恒 collateral0；
+        // 固定索引在部分启用（如 USDT 关/DAI 开，或 wstETH 关/cbBTC 开）时会越界 revert，故用计数器。
+        uint8 m = 1; // USDC 恒 market 0
         _setSupplyCap(pool, 0, vm.envOr("MAINNET_USDC_SUPPLY_CAP", uint256(0)));
-        if (usdt.enabled) _setSupplyCap(pool, 1, vm.envOr("MAINNET_USDT_SUPPLY_CAP", uint256(0)));
-        if (dai.enabled) _setSupplyCap(pool, 2, vm.envOr("MAINNET_DAI_SUPPLY_CAP", uint256(0)));
-        // 抵押品上限（raw 单位）：ETH=0 / wstETH=1 / cbBTC=2（前提是 enabled）
+        if (usdt.enabled) _setSupplyCap(pool, m++, vm.envOr("MAINNET_USDT_SUPPLY_CAP", uint256(0)));
+        if (dai.enabled) _setSupplyCap(pool, m++, vm.envOr("MAINNET_DAI_SUPPLY_CAP", uint256(0)));
+        uint8 c = 1; // ETH 恒 collateral 0
         _setCollateralCap(pool, 0, vm.envOr("MAINNET_ETH_COLLATERAL_CAP", uint256(0)));
-        if (wsteth.enabled) _setCollateralCap(pool, 1, vm.envOr("MAINNET_WSTETH_COLLATERAL_CAP", uint256(0)));
-        if (cbbtc.enabled) _setCollateralCap(pool, 2, vm.envOr("MAINNET_CBBTC_COLLATERAL_CAP", uint256(0)));
+        if (wsteth.enabled) _setCollateralCap(pool, c++, vm.envOr("MAINNET_WSTETH_COLLATERAL_CAP", uint256(0)));
+        if (cbbtc.enabled) _setCollateralCap(pool, c++, vm.envOr("MAINNET_CBBTC_COLLATERAL_CAP", uint256(0)));
 
         // ===== 治理层：多签直持（默认）或 Timelock 包裹 =====
         address governance = admin;
