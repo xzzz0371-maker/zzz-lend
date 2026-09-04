@@ -1,90 +1,80 @@
 # ZZZ Lend
 
-风险分层 DeFi 借贷协议（Base 主网 / Sepolia 测试网）。
-Risk-tiered DeFi lending protocol — lend USDC/USDT/DAI, borrow against ETH/cbBTC with 5-tier LTV risk tiers.
+Risk-tiered DeFi lending protocol on **Base mainnet** / **Sepolia testnet**.
 
-**线上前端 / Live frontend**：<https://zzz-lend.pages.dev/dashboard/>
+**Live frontend**: <https://zzz-lend.pages.dev/>
 
-## 简介
+## Overview
 
-ZZZ Lend 是一个模块化的借贷协议：用户可存入 **USDC / USDT / DAI** 赚取利息，并以 **ETH / cbBTC**（Base V1）作为抵押品借款。协议通过 **风险分层（5 档 LTV/LT）** 精细控制风险，内置清算、坏账处理、储备金与 Treasury 分成机制。
+ZZZ Lend is a modular lending protocol: users deposit **USDC / USDT / DAI** to earn interest and borrow against **ETH / cbBTC** (Base V1) as collateral. Risk is controlled through **5-tier risk tiers (LTV/LT)**, with built-in liquidation, bad-debt handling, reserve, and Treasury split.
 
-> ⚠️ **状态声明**：协议已完成 Sepolia 测试网验证（230 项测试全绿）与 Base 主网 fork dress rehearsal，**但尚未经过外部安全审计**。在主网上线前请自行评估风险，或联系专业审计机构。
+> ⚠️ **Status**: The protocol has passed Sepolia testnet validation (230 tests green) and Base mainnet fork dress rehearsal, **but has NOT yet undergone an external security audit**. Please assess risks yourself before any mainnet deployment, or contact a professional auditor.
 
-## 核心特性
+## Core Features
 
-- **多资产市场**：USDC（基座）、USDT、DAI 借贷市场 × ETH、cbBTC 抵押品（wstETH 合约支持保留，Base V1 因无官方 feed 默认禁用）
-- **风险分层**：每抵押品 5 档 LTV/Liquidation Threshold（cbBTC 保守档 45/55/65/70/75，ETH 档 50/60/70/75/80），借款按 tier 计息
-- **供应/抵押上限**：`setMarketSupplyCap` / `setCollateralCap` 每市场/每抵押品总量上限（0 = 不限制）
-- **清算与坏账**：抵押品清算、`handleBadDebt` 坏账处理（先扣储备，后摊薄存款人）
-- **收益分配**：借款人利息 → 存款人 94% / 储备 4% / Treasury 2%（可治理调整）
-- **治理**：可选 OZ TimelockController 包裹（参数变更走延迟执行）；PAUSER 独立即时熔断；多签（Safe）权限收口
-- **Oracle**：Chainlink 喂价，部署前 `_preflight` 校验 feed decimals / 价格 / 新鲜度
+- **Multi-asset markets**: USDC (base), USDT, DAI lending markets × ETH, cbBTC collateral (wstETH contract support is kept but disabled on Base V1 due to no official feed)
+- **Risk tiers**: 5 LTV/Liquidation Threshold tiers per collateral (cbBTC conservative 45/55/65/70/75, ETH 50/60/70/75/80), tiered borrowing rates
+- **Supply / collateral caps**: `setMarketSupplyCap` / `setCollateralCap` per-market / per-collateral total caps (0 = unlimited)
+- **Liquidation & bad debt**: collateral liquidation, `handleBadDebt` (reserve-first, then depositor dilution)
+- **Revenue split**: borrower interest → depositors 94% / reserve 4% / Treasury 2% (governance adjustable)
+- **Governance**: optional OZ TimelockController wrapper (delayed param changes); independent PAUSER instant circuit breaker; multisig (Safe) permission handover
+- **Oracle**: Chainlink feeds with `_preflight` deployment checks (decimals / price / freshness)
 
-## 架构
+## Architecture
 
 ```
 contracts/
 ├── src/
-│   ├── LendingPool.sol          # 核心：存取借还、清算、caps、Treasury
-│   ├── RiskManager.sol          # LTV / LT 风险档位
-│   ├── LiquidationManager.sol   # 清算折扣 / bonus
-│   ├── ReserveManager.sol       # 储备金
-│   ├── InterestRateModel.sol    # 利率模型（NORMAL 预设）
+│   ├── LendingPool.sol          # Core: supply/withdraw/borrow/repay, liquidation, caps, Treasury
+│   ├── RiskManager.sol          # LTV / LT risk tiers
+│   ├── LiquidationManager.sol   # Liquidation discount / bonus
+│   ├── ReserveManager.sol       # Reserves
+│   ├── InterestRateModel.sol    # Interest rate model (NORMAL preset)
 │   ├── oracle/ChainlinkOracle.sol
-│   └── risk/RiskEngine.sol      # 风险评估与采样
+│   └── risk/RiskEngine.sol      # Risk assessment & sampling
 ├── script/
-│   ├── DeployMainnet.s.sol      # Base 主网部署模板（Base 官方 token/feed 内建）
-│   └── MainnetDeployAndTransfer.s.sol # 多签/Timelock 权限收口（Step 4–11）
-├── test/                        # forge test 32 suites / 230 passed
-└── deployments/                 # 部署产物（gitignored）
-frontend/       # Next.js 前端（zzz-lend.pages.dev/dashboard）
-services/monitor/ # 轮询监控（可清算 / 低 HF / 利用率 / feed 告警，Telegram/webhook）
-scripts/feed-health-check/ # Base feed 健康检查（TS+viem）
-docs/           # 完整文档 / 审计报告 / 主网准备手册
+│   ├── DeployMainnet.s.sol      # Base mainnet deploy template (Base official token/feed embedded)
+│   └── MainnetDeployAndTransfer.s.sol # Multisig/Timelock permission handover (Step 4–11)
+├── test/                        # forge test: 32 suites / 230 passed
+└── deployments/                 # Deployment artifacts (gitignored)
+frontend/       # Next.js frontend (zzz-lend.pages.dev)
+services/monitor/ # Polling monitor (liquidatable / low HF / utilization / feed alerts, Telegram/webhook)
+scripts/feed-health-check/ # Base feed health check (TS+viem)
+docs/           # Full docs / audit reports / mainnet prep guides
 ```
 
-## 快速开始（合约）
+## Quick Start (contracts)
 
 ```bash
 cd contracts
-cp .env.example .env   # 填 RPC / 私钥
+cp .env.example .env   # fill RPC / private key
 forge build
-forge test             # 全量测试（ForkMainnet 仅在 Base fork 下运行）
-# Base 主网 fork dress rehearsal：
+forge test             # full test suite (ForkMainnet runs only on Base fork)
+# Base mainnet fork dress rehearsal:
 forge test --match-contract ForkMainnet -vvv --fork-url https://mainnet.base.org
 ```
 
-## 主网部署（Base · chainId 8453）
+## Mainnet Deployment (Base · chainId 8453)
 
-1. 创建 Safe 多签（官方地址已在 `docs/主网多签与权限收口手册.md` 核验）
+1. Create a Safe multisig (official addresses verified in `docs/主网多签与权限收口手册.md`)
 2. `forge script script/DeployMainnet.s.sol:DeployMainnet --rpc-url ... --broadcast`
-3. `forge script script/MainnetDeployAndTransfer.s.sol:MainnetDeployAndTransfer --rpc-url ... --broadcast`（权限收口）
-4. 链上人工复核（脚本 Step 10/11）
+3. `forge script script/MainnetDeployAndTransfer.s.sol:MainnetDeployAndTransfer --rpc-url ... --broadcast` (permission handover)
+4. On-chain manual verification (script Step 10/11)
 
-> 部署前请在 fork 上 dry-run 预演；权限收口脚本**不做部署**，只做角色移交与撤销。
+> Always dry-run on a fork before deploying; the handover script does **no** deployment, only role transfer & revoke.
 
-## 文档
+## Docs
 
-**协议说明与审计**
-- `docs/ZZZ_Lend_完整文档.md` — 协议完整说明（机制、参数、角色）
-- `docs/安全审计报告_V2多资产_2026-09-02.md` — 内部安全审计（V2 多资产）
-- `docs/安全审计报告.md` — 内部安全审计（初版）
-- `docs/修复记录_v1.1.md` — 修复记录
-
-**测试与验证**
-- `docs/E2E_Sepolia_测试报告.md` — Sepolia 端到端测试报告
-- `docs/Fork主网dress rehearsal报告.md` — Base 主网 fork 演练（8/8 通过）
-- `docs/前端_验证报告_v1.0.md` — 前端验证报告
-
-**主网上线（Base）**
-- `docs/主网Oracle配置表.md` — Base 官方 Chainlink feed 配置
-- `docs/主网多签与权限收口手册.md` — Safe 多签 + Timelock 权限收口流程
-- `docs/冷启动与运营方案.md` — 上线初期流动性/限额/获客/监控
-- `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md` — 主网准备改动与遗留项
+- `docs/ZZZ_Lend_完整文档.md` — full protocol spec
+- `docs/安全审计报告_V2多资产_2026-09-02.md` — internal security audit (V2 multi-asset)
+- `docs/E2E_Sepolia_测试报告.md` — Sepolia E2E test report
+- `docs/Fork主网dress rehearsal报告.md` — Base mainnet fork rehearsal (8/8 passed)
+- `docs/主网Oracle配置表.md` — Base official Chainlink feed config
+- `docs/主网多签与权限收口手册.md` — Safe multisig + Timelock permission handover guide
+- `docs/冷启动与运营方案.md` — cold-start liquidity / caps / growth / monitoring plan
 
 ## License
 
 [MIT](LICENSE) © 2026 xzzz0371-maker
 
-允许任何人自由使用、修改、商用，**但请保留本项目来源与本版权声明**。
+Free to use, modify and commercialize. **Please retain the project source and this copyright notice.**
