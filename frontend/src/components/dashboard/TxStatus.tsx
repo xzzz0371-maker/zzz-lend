@@ -27,7 +27,7 @@ export function TxStatus({ hash }: { hash?: Hash }) {
         ✓ Confirmed{" "}
         <a
           className="underline"
-          href={`https://sepolia.etherscan.io/tx/${hash}`}
+          href={`https://basescan.org/tx/${hash}`}
           target="_blank"
           rel="noreferrer"
         >

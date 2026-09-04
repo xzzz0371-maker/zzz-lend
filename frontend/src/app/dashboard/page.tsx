@@ -44,7 +44,7 @@ function DashboardInner() {
       <div className="card mx-auto max-w-md p-10 text-center">
         <h1 className="font-display text-2xl font-bold text-slate-800">Connect your wallet</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Connect to the Sepolia testnet to supply, borrow, withdraw and repay.
+          Connect to Base mainnet to supply, borrow, withdraw and repay.
         </p>
       </div>
     );

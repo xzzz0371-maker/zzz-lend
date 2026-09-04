@@ -30,7 +30,7 @@ async function main() {
     process.exit(1);
   }
   const deploymentsPath = path.resolve(
-    envOr("DEPLOYMENTS", "../frontend/src/lib/deployments/sepolia.json")
+    envOr("DEPLOYMENTS", "../frontend/src/lib/deployments/base.json")
   );
   const outDir = path.resolve(envOr("OUT_DIR", "./out"));
   touchFile(path.join(outDir, ".keep"));

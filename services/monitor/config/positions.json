@@ -1,16 +1,15 @@
 {
-  "comment": "盯梢对象配置。'users' 为需要轮询判断清算/低HF的账户（测试演示用户/前端已知地址）；如部署了 Subgraph 可改从索引读用户集。",
-  "chainId": 11155111,
-  "pool": "0xA958E9Ab95CEaFF5f341947824bA2237745Ec07D",
+  "comment": "盯梢对象配置（Base 主网）。'users' 为需要轮询判断清算/低HF的账户（上线后填实际关注地址）；pool 地址以 deployments/base.json 为准（部署后填写）。如部署了 Subgraph 可改从索引读用户集。",
+  "chainId": 8453,
+  "pool": "",
   "markets": [
-    { "id": 0, "symbol": "USDC", "token": "0x54dE52C8F197A504F7B18F2AaAA77454C27FDD5E", "decimals": 6 },
-    { "id": 1, "symbol": "USDT", "token": "0x8Ecf7C345266aF5fc002c491e608530C917756CB", "decimals": 6 },
-    { "id": 2, "symbol": "DAI", "token": "0xb241519DAEC4aCBF294D59E7D24A2762dBd434EC", "decimals": 18 }
+    { "id": 0, "symbol": "USDC", "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "decimals": 6 },
+    { "id": 1, "symbol": "USDT", "token": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", "decimals": 6 },
+    { "id": 2, "symbol": "DAI", "token": "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", "decimals": 18 }
   ],
   "collaterals": [
     { "id": 0, "symbol": "ETH", "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", "decimals": 18 },
-    { "id": 1, "symbol": "wstETH", "token": "0xeA1d9f57537eB74114A47812b2D944CaBA6C152E", "decimals": 18 },
-    { "id": 2, "symbol": "WBTC", "token": "0x5a8026c320c1c337526A5a99C9D0D2b7c001e91B", "decimals": 8 }
+    { "id": 1, "symbol": "cbBTC", "token": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", "decimals": 8 }
   ],
   "users": []
 }

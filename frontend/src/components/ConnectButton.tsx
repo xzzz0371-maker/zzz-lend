@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
 import { truncateAddress } from "@/lib/format";
+import { CHAIN_ID } from "@/lib/config";
 
 export function ConnectButton() {
   const { address, isConnected } = useAccount();
@@ -40,9 +41,9 @@ export function ConnectButton() {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        {chainId !== 11155111 && (
+        {chainId !== CHAIN_ID && (
           <span className="pill bg-red-50 text-red-600 ring-1 ring-red-200">
-            Wrong network — switch to Sepolia
+            Wrong network — switch to Base
           </span>
         )}
         <button

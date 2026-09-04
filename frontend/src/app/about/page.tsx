@@ -114,14 +114,14 @@ export default function AboutPage() {
           </li>
           <li>
             <strong className="text-slate-800">Smart contract risk:</strong> this is unaudited by an
-            independent third party; use at your own risk on the Sepolia testnet only.
+            independent third party; use at your own risk.
           </li>
         </ul>
       </section>
 
       <section>
         <h2 className="mb-3 font-display text-lg font-bold text-slate-800">
-          Deployed Contracts (Sepolia)
+          Deployed Contracts (Base)
         </h2>
         <div className="card overflow-x-auto p-4">
           <table className="w-full text-left text-sm">
@@ -162,9 +162,9 @@ export default function AboutPage() {
       <section className="card p-5" style={{ borderColor: "rgba(239,68,68,0.3)" }}>
         <h2 className="mb-2 font-display text-lg font-bold text-red-600">Disclaimer</h2>
         <p className="text-sm text-slate-600">
-          This is a testnet demo connected to Sepolia. It uses mock test assets and simulated
-          history. Nothing on this page is an offer of financial products, and no returns are
-          guaranteed. Do not use real funds.
+          This app runs on Base mainnet. Nothing on this page is an offer of financial products,
+          and no returns are guaranteed. Cryptographic assets involve risk; only participate with
+          funds you can afford to lose.
         </p>
       </section>
     </div>

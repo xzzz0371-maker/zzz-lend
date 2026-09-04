@@ -41,7 +41,7 @@ export function NavBar() {
         <div className="flex items-center gap-3">
           <span className="pill bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200 hidden sm:inline-flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Sepolia Testnet
+            Base Mainnet
           </span>
           <ConnectButton />
         </div>

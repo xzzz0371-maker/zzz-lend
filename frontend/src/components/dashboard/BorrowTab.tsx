@@ -93,7 +93,7 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
         <p className="mt-1 text-xs text-slate-500">
           {cfg.label} · Higher LTV = greater capital efficiency, but higher liquidation risk and
           higher interest rates. Select a tier aligned with your risk tolerance. LTV/LT limits are
-          applied per collateral asset (WBTC uses a conservative table).
+          applied per collateral asset (cbBTC uses a conservative table).
         </p>
         <p className="mt-1 text-xs font-semibold text-slate-700">
           Selected {cfg.ltv}% LTV → max borrowable: {formatToken(maxRaw, market.decimals)}{" "}
@@ -184,7 +184,7 @@ export function BorrowTab({ market, initialTier }: { market: MarketInfo; initial
           {tierLocked
             ? `You are already borrowing at tier ${Number(position?.tier)} — repay in full to switch tiers.`
             : collValueUsd <= 0
-              ? "No collateral — deposit ETH/wstETH/WBTC in the Collateral tab first."
+              ? "No collateral — deposit ETH/cbBTC in the Collateral tab first."
               : raw <= 0n
                 ? `Enter an amount of at least ${MIN_BORROW} ${market.symbol}.`
                 : raw > maxRaw

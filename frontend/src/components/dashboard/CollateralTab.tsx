@@ -154,7 +154,7 @@ export function CollateralTab({ prices }: { prices: Record<string, number> }) {
   return (
     <div className="space-y-3">
       <div className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700 ring-1 ring-sky-200">
-        Deposit ETH, wstETH or WBTC as collateral. Collateral is shared across all borrow markets
+        Deposit ETH or cbBTC as collateral. Collateral is shared across all borrow markets
         (USDC / USDT / DAI). LTV &amp; liquidation thresholds are calibrated per asset.
       </div>
       {COLLATERALS.map((c) => (

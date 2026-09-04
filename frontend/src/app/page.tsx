@@ -84,13 +84,13 @@ export default function HomePage() {
       <section className="grid items-center gap-8 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
           <span className="pill bg-blue-50 text-blue-600 ring-1 ring-blue-200">
-            Sepolia Testnet · Live
+            Base Mainnet · Live
           </span>
           <h1 className="font-display text-4xl font-bold text-slate-900 sm:text-5xl">
             Lending where <span className="text-gradient">you choose your risk</span>
           </h1>
           <p className="max-w-xl text-slate-500">
-            Deposit USDC, USDT or DAI to earn, or borrow against ETH, wstETH and WBTC across five
+            Deposit USDC, USDT or DAI to earn, or borrow against ETH and cbBTC across five
             risk tiers. Real-time risk pricing, transparent reserves, and losses shared by
             depositors on bad debt — like a fund whose NAV can decline.
           </p>
@@ -148,7 +148,7 @@ export default function HomePage() {
         </div>
         <p className="mt-3 text-xs text-slate-500">
           Each borrow asset is an independent market with its own utilization, rates, reserve and
-          bad-debt accounting. Collateral: ETH, wstETH and WBTC are shared across markets.
+          bad-debt accounting. Collateral: ETH and cbBTC are shared across markets.
         </p>
       </section>
 
@@ -190,7 +190,7 @@ export default function HomePage() {
         <p className="mb-4 text-sm text-slate-500">
           Pick a tier. Higher LTV tiers offer greater capital efficiency but carry higher
           liquidation risk and higher interest rates. Select a tier aligned with your risk
-          tolerance. LTV limits are calibrated per collateral asset (e.g. WBTC uses a conservative
+          tolerance. LTV limits are calibrated per collateral asset (e.g. cbBTC uses a conservative
           table).
         </p>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">

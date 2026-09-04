@@ -12,7 +12,7 @@ export function Footer() {
             <span className="font-display text-sm font-bold text-slate-800">ZZZ Lend</span>
           </div>
           <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            Risk-layered DeFi lending on Sepolia. Transparent mechanics: 94% of borrower interest
+            Risk-layered DeFi lending on Base. Transparent mechanics: 94% of borrower interest
             is passed directly to depositors. Deposits are not guaranteed — principal may decrease
             due to bad debt, like a fund whose NAV can decline.
           </p>
@@ -27,7 +27,7 @@ export function Footer() {
             </li>
             <li>
               <a className="hover:text-accent" href={`${ETHERSCAN_URL}/address/${ADDRESSES.usdc}`} target="_blank" rel="noreferrer">
-                MockUSDC
+                USDC
               </a>
             </li>
             <li>
@@ -40,7 +40,7 @@ export function Footer() {
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</h4>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li>Chain: Sepolia (testnet)</li>
+            <li>Chain: Base (mainnet)</li>
             <li>Version: 1.2.0</li>
             <li>Audit: Security review completed, pending third-party audit</li>
           </ul>

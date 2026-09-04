@@ -1,8 +1,10 @@
-import deploymentsRaw from "./deployments/sepolia.json";
+import deploymentsRaw from "./deployments/base.json";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const deployments = deploymentsRaw as any;
 
-export const CHAIN_ID = 11155111;
+// Base mainnet (chainId 8453). Contract addresses are filled into
+// deployments/base.json after real deployment; empty = not yet deployed.
+export const CHAIN_ID = 8453;
 export const ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 export const MAX_UINT =
   115792089237316195423570985008687907853269984665640564039457584007913129639935n;
@@ -14,6 +16,7 @@ export const ADDRESSES = {
   usdc: deployments.usdc,
   usdt: deployments.usdt,
   dai: deployments.dai,
+  cbbtc: deployments.cbbtc,
   wsteth: deployments.wsteth,
   wbtc: deployments.wbtc,
   switchableOracle: deployments.switchableOracle,
@@ -26,16 +29,16 @@ export const ADDRESSES = {
 };
 
 export const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL ?? "https://ethereum-sepolia-rpc.publicnode.com";
+  process.env.NEXT_PUBLIC_RPC_URL ?? "https://mainnet.base.org";
 
-export const ETHERSCAN_URL = "https://sepolia.etherscan.io";
+export const ETHERSCAN_URL = "https://basescan.org";
 
 // WalletConnect project id (optional). Set NEXT_PUBLIC_WC_PROJECT_ID to enable WalletConnect.
 export const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID;
 
 // Fallback ETH/USD price used when the on-chain oracle read fails (e.g. feed stale/paused).
-// Demo fallback only; the app tries the live oracle first.
-export const FALLBACK_ETH_PRICE = 2400;
+// Demo fallback only; the app tries the live oracle first. (Base ETH/USD feed ~$2506, 2026-09.)
+export const FALLBACK_ETH_PRICE = 2506;
 export const USDC_DECIMALS = 6;
 export const ETH_DECIMALS = 18;
 export const WAD = 1_000_000_000_000_000_000n;
@@ -89,11 +92,11 @@ export const BORROW_MARKETS: MarketInfo[] = [
   { id: 2, symbol: "DAI", name: "Dai Stablecoin", address: deployments.dai, decimals: 18, stable: true },
 ];
 
-// Collateral assets (order = pool collateral id; 0 = native ETH).
+// Collateral assets (order = pool collateral id; 0 = native ETH). Base V1: ETH + cbBTC
+// (wstETH disabled on Base — no official wstETH/USD feed; WBTC replaced by cbBTC).
 export const COLLATERALS: CollateralInfo[] = [
   { id: 0, symbol: "ETH", name: "Ether", address: ETH_ADDRESS, decimals: 18, native: true },
-  { id: 1, symbol: "wstETH", name: "Wrapped Staked ETH", address: deployments.wsteth, decimals: 18, native: false },
-  { id: 2, symbol: "WBTC", name: "Wrapped Bitcoin", address: deployments.wbtc, decimals: 8, native: false },
+  { id: 1, symbol: "cbBTC", name: "Coinbase Wrapped BTC", address: deployments.cbbtc, decimals: 8, native: false },
 ];
 
 export const ETH = ETH_ADDRESS;
@@ -103,13 +106,11 @@ export const SCALE = 1_000_000_000_000_000_000n; // 1e18 (WAD)
 // tiers 1..5 → maxLTV % and liquidation threshold %.
 export const COLLATERAL_TIER_LTV: Record<string, number[]> = {
   ETH: [50, 60, 70, 75, 80],
-  wstETH: [50, 60, 70, 75, 80],
-  WBTC: [45, 55, 65, 70, 75],
+  cbBTC: [45, 55, 65, 70, 75],
 };
 export const COLLATERAL_TIER_LT: Record<string, number[]> = {
   ETH: [60, 70, 78, 85, 90],
-  wstETH: [60, 70, 78, 85, 90],
-  WBTC: [55, 65, 75, 80, 85],
+  cbBTC: [55, 65, 75, 80, 85],
 };
 
 export const MIN_COLLATERAL_TOKENS = 0.01; // whole tokens
