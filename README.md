@@ -1,6 +1,9 @@
 # ZZZ Lend
 
 风险分层 DeFi 借贷协议（Base 主网 / Sepolia 测试网）。
+Risk-tiered DeFi lending protocol — lend USDC/USDT/DAI, borrow against ETH/cbBTC with 5-tier LTV risk tiers.
+
+**线上前端 / Live frontend**：<https://zzz-lend.pages.dev/dashboard/>
 
 ## 简介
 
@@ -63,10 +66,22 @@ forge test --match-contract ForkMainnet -vvv --fork-url https://mainnet.base.org
 
 ## 文档
 
-- `docs/ZZZ_Lend_完整文档.md` — 协议完整说明
-- `docs/主网Oracle配置表.md` / `docs/主网多签与权限收口手册.md` / `docs/冷启动与运营方案.md` — Base 主网上线准备
-- `docs/Fork主网dress rehearsal报告.md` — Base fork 演练结果（8/8）
-- `docs/安全审计报告_V2多资产_2026-09-02.md` — 内部审计
+**协议说明与审计**
+- `docs/ZZZ_Lend_完整文档.md` — 协议完整说明（机制、参数、角色）
+- `docs/安全审计报告_V2多资产_2026-09-02.md` — 内部安全审计（V2 多资产）
+- `docs/安全审计报告.md` — 内部安全审计（初版）
+- `docs/修复记录_v1.1.md` — 修复记录
+
+**测试与验证**
+- `docs/E2E_Sepolia_测试报告.md` — Sepolia 端到端测试报告
+- `docs/Fork主网dress rehearsal报告.md` — Base 主网 fork 演练（8/8 通过）
+- `docs/前端_验证报告_v1.0.md` — 前端验证报告
+
+**主网上线（Base）**
+- `docs/主网Oracle配置表.md` — Base 官方 Chainlink feed 配置
+- `docs/主网多签与权限收口手册.md` — Safe 多签 + Timelock 权限收口流程
+- `docs/冷启动与运营方案.md` — 上线初期流动性/限额/获客/监控
+- `docs/主网准备_本轮改动说明与遗留问题_2026-09-03.md` — 主网准备改动与遗留项
 
 ## License
 
