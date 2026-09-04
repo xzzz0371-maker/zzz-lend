@@ -4,6 +4,7 @@
 
 # 允许提交示例文件
 !.env.example
+!.env.mainnet.example
 
 # ---------- Node ----------
 node_modules/
