@@ -101,6 +101,13 @@
 - **工具重跑存档**（本机 `audit_v2/`）：Slither 41/102/0、coverage LendingPool 94.21%。
 - 文档：D1 顺序统一为“物理→账面→存款人→Treasury 最后”（主网准备 §3.1#1 修正、删除 treasury 承担讨论）；AuditPoc 注释更新。
 
+### 2.13 Base 主网第二阶段专项（Oracle 配置 / fork rehearsal / 多签收口 / 冷启动）
+- **Oracle 真实配置（任务1）**：从 docs.chain.link 地址页 SSR + **Base 主网 RPC 链上实测**核对 5 个官方 feed（ETH/USDC/USDT/DAI/cbBTC，desc/decimals/answer/新鲜度全过）。**关键结论：Base 无官方 wstETH/ETH 或 wstETH/USD**（仅有 wstETH/stETH；stETH/ETH 检索实为 Inception instETH/ETH）→ **Base V1 禁 wstETH**（`ENABLE_WSTETH=false`，合约保留支持）；BTC 抵押采用 **cbBTC**（Base 生态标准，官方 cbBTC/USD `0x07DA0E…`）。`DeployMainnet.s.sol` 内建 Base 官方 token/feed 默认值 + 预检新鲜度放宽 26h（稳定币偏差型 10h+ 更新）。交付 `docs/主网Oracle配置表.md`、`scripts/feed-health-check`（TS+viem，5/5 OK）。
+- **fork dress rehearsal（任务2）**：`test/ForkMainnet.t.sol`（fork-only，chainId 8453 判定 skip）——真实 Chainlink feed 只读 + Mock 同精度代币（因 Base 真 token fork 上 approve 不可用，见报告），全流程 **8/8 passed**（供应/抵押/借款/还款/提现/清算/坏账/守恒）。交付 `docs/Fork主网dress rehearsal报告.md`。
+- **多签/Timelock 收口（任务3）**：Safe Base 官方地址核验（factory `0x4e1D…`、Safe1.4.1 `0x4167…`、SafeL2 `0x29fc…`、handler `0xfd07…`）；`script/MainnetDeployAndTransfer.s.sol`（Step4–11 收口流程）；交付 `docs/主网多签与权限收口手册.md`。
+- **冷启动与运营（任务4）**：交付 `docs/冷启动与运营方案.md`（流动性 A/B/C 评估+推荐、限额与提升时间表、获客渠道、监控指标、收入预测与盈亏平衡结论）。
+- 全量：`forge test` 32 suites / **230 passed** + 1 fork skipped（`ForkMainnet` 需 `--fork-url https://mainnet.base.org`）。
+
 ---
 
 ## 3. 未完成待办

@@ -65,38 +65,53 @@ contract DeployMainnet is Script {
         // PAUSER 保持独立快速熔断角色，不受 timelock 延迟约束。
         uint256 timelockDelay = vm.envOr("MAINNET_TIMELOCK_MIN_DELAY", uint256(0));
 
-        // ===== whitelist 配置（enabled 项必须提供真实 feed/token） =====
+        // ===== whitelist 配置（Base 主网 chainId 8453；默认值 = 官方 Chainlink feed / 官方代币，可被 env 覆盖） =====
+        // 抵押品：ETH（原生，恒启用）、cbBTC（Coinbase Wrapped BTC，保守档）。
+        // wstETH：合约保留支持但 **Base V1 默认禁用**（Base 无官方 wstETH/ETH 或 wstETH/USD feed，
+        //          合成需 wstETH/stETH × stETH/ETH 且 stETH/ETH 无官方源 → 主网不放行）。待官方 feed 就绪后 ENABLE_WSTETH=true 启用。
         // 市场（借贷资产）：USDC 为构造基座（6dp，恒启用）；USDT/DAI 按 enabled 追加。
         bool enableUsdt = vm.envOr("ENABLE_USDT", false);
         bool enableDai = vm.envOr("ENABLE_DAI", false);
-        bool enableWsteth = vm.envOr("ENABLE_WSTETH", false);
-        bool enableWbtc = vm.envOr("ENABLE_WBTC", false);
-        AssetConf memory usdc =
-            AssetConf(vm.envAddress("MAINNET_USDC_TOKEN"), vm.envAddress("MAINNET_USDC_USD_FEED"), 8, true);
+        bool enableWsteth = vm.envOr("ENABLE_WSTETH", false); // Base V1 恒 false
+        bool enableCbbtc = vm.envOr("ENABLE_CBBTC", false);
+        AssetConf memory usdc = AssetConf(
+            vm.envOr("MAINNET_USDC_TOKEN", 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913),
+            vm.envOr("MAINNET_USDC_USD_FEED", 0x7e860098F58bBFC8648a4311b374B1D669a2bc6B),
+            8,
+            true
+        );
         AssetConf memory usdt = AssetConf(
-            vm.envOr("MAINNET_USDT_TOKEN", address(0)), vm.envOr("MAINNET_USDT_USD_FEED", address(0)), 8, enableUsdt
+            vm.envOr("MAINNET_USDT_TOKEN", 0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2),
+            vm.envOr("MAINNET_USDT_USD_FEED", 0xf19d560eB8d2ADf07BD6D13ed03e1D11215721F9),
+            8,
+            enableUsdt
         );
         AssetConf memory dai = AssetConf(
-            vm.envOr("MAINNET_DAI_TOKEN", address(0)), vm.envOr("MAINNET_DAI_USD_FEED", address(0)), 8, enableDai
+            vm.envOr("MAINNET_DAI_TOKEN", 0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb),
+            vm.envOr("MAINNET_DAI_USD_FEED", 0x591e79239a7d679378eC8c847e5038150364C78F),
+            8,
+            enableDai
         );
-        // 抵押品：ETH 为构造内建（恒启用）；wstETH（同 ETH 档）/WBTC（保守档）按 enabled 追加。
         AssetConf memory wsteth = AssetConf(
             vm.envOr("MAINNET_WSTETH_TOKEN", address(0)),
             vm.envOr("MAINNET_WSTETH_USD_FEED", address(0)),
             8,
             enableWsteth
         );
-        AssetConf memory wbtc = AssetConf(
-            vm.envOr("MAINNET_WBTC_TOKEN", address(0)), vm.envOr("MAINNET_WBTC_USD_FEED", address(0)), 8, enableWbtc
+        AssetConf memory cbbtc = AssetConf(
+            vm.envOr("MAINNET_CBBTC_TOKEN", 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf),
+            vm.envOr("MAINNET_CBBTC_USD_FEED", 0x07DA0E54543a844a80ABE69c8A12F22B3aA59f9D),
+            8,
+            enableCbbtc
         );
-        address ethFeed = vm.envAddress("MAINNET_ETH_USD_FEED");
+        address ethFeed = vm.envOr("MAINNET_ETH_USD_FEED", 0x50015f8b17fb2C290Dde41fDc246ed0dcEE93a8b);
 
         _preflight(usdc, "USDC", true);
         _preflight(usdt, "USDT", usdt.enabled);
         _preflight(dai, "DAI", dai.enabled);
         _preflight(AssetConf(ETH, ethFeed, 8, true), "ETH", true);
         _preflight(wsteth, "wstETH", wsteth.enabled);
-        _preflight(wbtc, "WBTC", wbtc.enabled);
+        _preflight(cbbtc, "cbBTC", cbbtc.enabled);
 
         vm.startBroadcast(deployerKey);
 
@@ -107,7 +122,7 @@ contract DeployMainnet is Script {
         if (usdt.enabled) oracle.setFeed(usdt.token, IAggregatorV3(usdt.feed), usdt.feedDecimals);
         if (dai.enabled) oracle.setFeed(dai.token, IAggregatorV3(dai.feed), dai.feedDecimals);
         if (wsteth.enabled) oracle.setFeed(wsteth.token, IAggregatorV3(wsteth.feed), wsteth.feedDecimals);
-        if (wbtc.enabled) oracle.setFeed(wbtc.token, IAggregatorV3(wbtc.feed), wbtc.feedDecimals);
+        if (cbbtc.enabled) oracle.setFeed(cbbtc.token, IAggregatorV3(cbbtc.feed), cbbtc.feedDecimals);
 
         InterestRateModel irm = new InterestRateModel();
         irm.applyPreset(InterestRateModel.MarketPreset.NORMAL);
@@ -123,14 +138,14 @@ contract DeployMainnet is Script {
         if (usdt.enabled) pool.addMarket(usdt.token, 6);
         if (dai.enabled) pool.addMarket(dai.token, 18);
         // ETH 哨兵：RiskManager 构造已预置同表，此处显式声明（防御性，防构造默认被误改）。
-        _setRiskTiers(rm, ETH, false); // 与 wstETH 相同：50/60/70/75/80 LTV
+        _setRiskTiers(rm, ETH, false); // 50/60/70/75/80 LTV
         if (wsteth.enabled) {
             pool.addCollateral(wsteth.token, 18);
             _setRiskTiers(rm, wsteth.token, false); // 与 ETH 同表：50/60/70/75/80 LTV
         }
-        if (wbtc.enabled) {
-            pool.addCollateral(wbtc.token, 8);
-            _setRiskTiers(rm, wbtc.token, true); // 保守表：45/55/65/70/75 LTV
+        if (cbbtc.enabled) {
+            pool.addCollateral(cbbtc.token, 8);
+            _setRiskTiers(rm, cbbtc.token, true); // 保守表：45/55/65/70/75 LTV
         }
         _verifyEthTiers(rm); // 部署后验证 ETH 5 档非 0
 
@@ -144,10 +159,10 @@ contract DeployMainnet is Script {
         _setSupplyCap(pool, 0, vm.envOr("MAINNET_USDC_SUPPLY_CAP", uint256(0)));
         if (usdt.enabled) _setSupplyCap(pool, 1, vm.envOr("MAINNET_USDT_SUPPLY_CAP", uint256(0)));
         if (dai.enabled) _setSupplyCap(pool, 2, vm.envOr("MAINNET_DAI_SUPPLY_CAP", uint256(0)));
-        // 抵押品上限（raw 单位）：ETH=0 / wstETH=1 / WBTC=2（前提是 enabled）
+        // 抵押品上限（raw 单位）：ETH=0 / wstETH=1 / cbBTC=2（前提是 enabled）
         _setCollateralCap(pool, 0, vm.envOr("MAINNET_ETH_COLLATERAL_CAP", uint256(0)));
         if (wsteth.enabled) _setCollateralCap(pool, 1, vm.envOr("MAINNET_WSTETH_COLLATERAL_CAP", uint256(0)));
-        if (wbtc.enabled) _setCollateralCap(pool, 2, vm.envOr("MAINNET_WBTC_COLLATERAL_CAP", uint256(0)));
+        if (cbbtc.enabled) _setCollateralCap(pool, 2, vm.envOr("MAINNET_CBBTC_COLLATERAL_CAP", uint256(0)));
 
         // ===== 治理层：多签直持（默认）或 Timelock 包裹 =====
         address governance = admin;
@@ -201,7 +216,7 @@ contract DeployMainnet is Script {
             usdt,
             dai,
             wsteth,
-            wbtc,
+            cbbtc,
             ethFeed,
             oracle,
             irm,
@@ -221,7 +236,7 @@ contract DeployMainnet is Script {
             usdt,
             dai,
             wsteth,
-            wbtc,
+            cbbtc,
             ethFeed,
             oracle,
             irm,
@@ -251,9 +266,11 @@ contract DeployMainnet is Script {
         _require(dec == a.feedDecimals, string.concat(symbol, " feed decimals mismatch"));
         (, int256 answer,, uint256 updatedAt,) = IAggregatorV3(a.feed).latestRoundData();
         _require(answer > 0, string.concat(symbol, " feed invalid answer"));
+        // 新鲜度：稳定币等偏差型 feed 可能 >24h 才更新一次，部署级护栏放宽到 26h（拦“停更一天以上”）；
+        // 更精细的逐资产 heartbeat 告警由 scripts/feed-health-check 负责。
         _require(
-            block.timestamp >= updatedAt && block.timestamp - updatedAt <= 2 hours,
-            string.concat(symbol, " feed stale (>2h)")
+            block.timestamp >= updatedAt && block.timestamp - updatedAt <= 26 hours,
+            string.concat(symbol, " feed stale (>26h)")
         );
         console2.log("[ok] preflight:", symbol, a.token);
     }
@@ -307,7 +324,7 @@ contract DeployMainnet is Script {
         AssetConf memory usdt,
         AssetConf memory dai,
         AssetConf memory wsteth,
-        AssetConf memory wbtc,
+        AssetConf memory cbbtc,
         address ethFeed,
         ChainlinkOracle oracle,
         InterestRateModel irm,
@@ -326,7 +343,7 @@ contract DeployMainnet is Script {
         console2.log("USDT enabled:", usdt.enabled, usdt.token);
         console2.log("DAI enabled:", dai.enabled, dai.token);
         console2.log("wstETH enabled:", wsteth.enabled, wsteth.token);
-        console2.log("WBTC enabled:", wbtc.enabled, wbtc.token);
+        console2.log("cbBTC enabled:", cbbtc.enabled, cbbtc.token);
         console2.log("ETH feed:", ethFeed);
         console2.log("ChainlinkOracle:", address(oracle));
         console2.log("InterestRateModel:", address(irm));
@@ -350,7 +367,7 @@ contract DeployMainnet is Script {
         AssetConf memory usdt,
         AssetConf memory dai,
         AssetConf memory wsteth,
-        AssetConf memory wbtc,
+        AssetConf memory cbbtc,
         address ethFeed,
         ChainlinkOracle oracle,
         InterestRateModel irm,
@@ -371,13 +388,13 @@ contract DeployMainnet is Script {
         obj = vm.serializeAddress("root", "usdt", usdt.enabled ? usdt.token : address(0));
         obj = vm.serializeAddress("root", "dai", dai.enabled ? dai.token : address(0));
         obj = vm.serializeAddress("root", "wsteth", wsteth.enabled ? wsteth.token : address(0));
-        obj = vm.serializeAddress("root", "wbtc", wbtc.enabled ? wbtc.token : address(0));
+        obj = vm.serializeAddress("root", "cbbtc", cbbtc.enabled ? cbbtc.token : address(0));
         obj = vm.serializeAddress("root", "ethUsdFeed", ethFeed);
         obj = vm.serializeAddress("root", "usdcUsdFeed", usdc.feed);
         obj = vm.serializeAddress("root", "usdtUsdFeed", usdt.feed);
         obj = vm.serializeAddress("root", "daiUsdFeed", dai.feed);
         obj = vm.serializeAddress("root", "wstethUsdFeed", wsteth.feed);
-        obj = vm.serializeAddress("root", "wbtcUsdFeed", wbtc.feed);
+        obj = vm.serializeAddress("root", "cbbtcUsdFeed", cbbtc.feed);
         obj = vm.serializeAddress("root", "oracle", address(oracle));
         obj = vm.serializeAddress("root", "interestRateModel", address(irm));
         obj = vm.serializeAddress("root", "riskManager", address(rm));
